@@ -49,7 +49,7 @@ public class TaskController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('task:manage')")
     @ResponseStatus(HttpStatus.CREATED)
     public TaskDetailResponse create(@AuthenticationPrincipal AuthenticatedUser principal,
                                      @Valid @RequestBody CreateTaskRequest request) {
@@ -63,7 +63,7 @@ public class TaskController {
     }
 
     @PatchMapping("/{taskId}")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('task:manage')")
     public TaskDetailResponse update(@AuthenticationPrincipal AuthenticatedUser principal,
                                      @PathVariable UUID taskId,
                                      @Valid @RequestBody UpdateTaskRequest request) {

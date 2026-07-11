@@ -29,17 +29,17 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('user:read')")
     public PageResponse<UserResponse> list(@AuthenticationPrincipal AuthenticatedUser principal,
                                            @RequestParam(required = false) String search,
-                                           @RequestParam(required = false) UserRole role,
+                                           @RequestParam(required = false) String role,
                                            @RequestParam(required = false) Boolean active,
                                            @PageableDefault(sort = "createdAt") Pageable pageable) {
         return userService.list(principal, search, role, active, pageable);
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('user:manage')")
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse create(@AuthenticationPrincipal AuthenticatedUser principal,
                                @Valid @RequestBody CreateUserRequest request) {
@@ -47,22 +47,31 @@ public class UserController {
     }
 
     @GetMapping("/{userId}")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('user:read')")
     public UserResponse get(@AuthenticationPrincipal AuthenticatedUser principal,
                             @PathVariable UUID userId) {
         return userService.get(principal, userId);
     }
 
     @PatchMapping("/{userId}")
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('user:manage')")
     public UserResponse update(@AuthenticationPrincipal AuthenticatedUser principal,
                                @PathVariable UUID userId,
                                @Valid @RequestBody UpdateUserRequest request) {
         return userService.update(principal, userId, request);
     }
 
+    @PatchMapping("/{userId}/password")
+    @PreAuthorize("hasAuthority('user:manage')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(@AuthenticationPrincipal AuthenticatedUser principal,
+                              @PathVariable UUID userId,
+                              @Valid @RequestBody AdminResetPasswordRequest request) {
+        userService.resetPassword(principal, userId, request);
+    }
+
     @PatchMapping("/{userId}/deactivate")
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('user:manage')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deactivate(@AuthenticationPrincipal AuthenticatedUser principal,
                            @PathVariable UUID userId) {

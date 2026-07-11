@@ -1,12 +1,18 @@
 package com.easytask.backend.user;
 
 import com.easytask.backend.auth.AuthenticatedUser;
+import com.easytask.backend.auth.RefreshTokenRepository;
 import com.easytask.backend.common.ConflictException;
 import com.easytask.backend.common.MembershipRole;
 import com.easytask.backend.common.NotFoundException;
 import com.easytask.backend.common.PageResponse;
+import com.easytask.backend.common.ValidationException;
+import com.easytask.backend.common.logging.SecurityAuditLog;
 import com.easytask.backend.organization.OrganizationRepository;
 import com.easytask.backend.project.ProjectMemberRepository;
+import com.easytask.backend.role.DataScope;
+import com.easytask.backend.role.Role;
+import com.easytask.backend.role.RoleRepository;
 import com.easytask.backend.team.TeamMemberRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -32,10 +39,13 @@ public class UserService {
     private final OrganizationRepository organizationRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SecurityAuditLog audit;
 
     @Transactional(readOnly = true)
-    public PageResponse<UserResponse> list(AuthenticatedUser principal, String search, UserRole role,
+    public PageResponse<UserResponse> list(AuthenticatedUser principal, String search, String role,
                                            Boolean active, Pageable pageable) {
         Set<UUID> visibleIds = visibleUserIdsOrNull(principal);
         if (visibleIds != null && visibleIds.isEmpty()) {
@@ -62,12 +72,16 @@ public class UserService {
         if (userRepository.existsByEmailIgnoreCase(request.email())) {
             throw new ConflictException("Email is already used");
         }
+        Role role = resolveRole(principal, request.roleId(), request.role());
+        if (role == null) {
+            throw new ValidationException("Either roleId or role is required", java.util.Map.of());
+        }
         AppUser user = userRepository.save(AppUser.builder()
                 .organization(organizationRepository.getReferenceById(principal.organizationId()))
                 .fullName(request.fullName())
                 .email(request.email().toLowerCase(Locale.ROOT))
                 .passwordHash(passwordEncoder.encode(request.initialPassword()))
-                .role(request.role())
+                .role(role)
                 .build());
         return UserResponse.from(user);
     }
@@ -76,16 +90,36 @@ public class UserService {
     public UserResponse update(AuthenticatedUser principal, UUID userId, UpdateUserRequest request) {
         AppUser user = userRepository.findByIdAndOrganizationId(userId, principal.organizationId())
                 .orElseThrow(() -> new NotFoundException("User not found"));
-        if (request.role() != null && request.role() != user.getRole() && userId.equals(principal.id())) {
-            throw new ConflictException("You cannot change your own role");
+        Role newRole = resolveRole(principal, request.roleId(), request.role());
+        if (newRole != null && !newRole.getId().equals(user.getRole().getId())) {
+            if (userId.equals(principal.id())) {
+                throw new ConflictException("You cannot change your own role");
+            }
+            user.setRole(newRole);
+            // Old sessions carry stale permission claims; kill them (D12).
+            refreshTokenRepository.revokeAllForUser(userId, Instant.now());
+            audit.roleChanged(principal.id(), userId, newRole.getName());
         }
         if (request.fullName() != null) {
             user.setFullName(request.fullName());
         }
-        if (request.role() != null) {
-            user.setRole(request.role());
-        }
         return UserResponse.from(user);
+    }
+
+    /**
+     * B1: admin sets a temporary password for a locked-out user. Own account
+     * uses PATCH /me/password (which verifies the current password) instead.
+     */
+    @Transactional
+    public void resetPassword(AuthenticatedUser principal, UUID userId, AdminResetPasswordRequest request) {
+        AppUser user = userRepository.findByIdAndOrganizationId(userId, principal.organizationId())
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        if (userId.equals(principal.id())) {
+            throw new ConflictException("Use the change-password endpoint for your own account");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        refreshTokenRepository.revokeAllForUser(userId, Instant.now());
+        audit.adminResetPassword(principal.id(), userId);
     }
 
     @Transactional
@@ -99,14 +133,36 @@ public class UserService {
             throw new ConflictException("User is already deactivated");
         }
         user.setActive(false);
+        audit.userDeactivated(principal.id(), userId);
     }
 
     /**
-     * Admins see the whole organization (returns {@code null} = no restriction).
-     * Managers see themselves plus every user in a team or project they manage.
+     * Accepts {@code roleId} (preferred) or the legacy {@code role} name;
+     * returns null when neither is present (meaning: no role specified).
+     * The role must belong to the caller's organization — cross-org is a 404.
+     */
+    private Role resolveRole(AuthenticatedUser principal, UUID roleId, String roleName) {
+        if (roleId == null && (roleName == null || roleName.isBlank())) {
+            return null;
+        }
+        if (roleId != null && roleName != null && !roleName.isBlank()) {
+            throw new ValidationException("Provide either roleId or role, not both", java.util.Map.of());
+        }
+        if (roleId != null) {
+            return roleRepository.findByIdAndOrganizationId(roleId, principal.organizationId())
+                    .orElseThrow(() -> new NotFoundException("Role not found"));
+        }
+        return roleRepository.findByOrganizationIdAndName(principal.organizationId(), roleName)
+                .orElseThrow(() -> new NotFoundException("Role not found"));
+    }
+
+    /**
+     * ORGANIZATION scope sees everyone (returns {@code null} = no restriction).
+     * Other scopes see themselves plus every user in a team or project where
+     * they hold the MANAGER membership (the legacy manager rule).
      */
     private Set<UUID> visibleUserIdsOrNull(AuthenticatedUser principal) {
-        if (principal.role() == UserRole.ORGANIZATION_ADMIN) {
+        if (principal.scope() == DataScope.ORGANIZATION) {
             return null;
         }
         Set<UUID> ids = new HashSet<>();
@@ -116,13 +172,13 @@ public class UserService {
         return ids;
     }
 
-    private Specification<AppUser> userSpecification(UUID organizationId, String search, UserRole role,
+    private Specification<AppUser> userSpecification(UUID organizationId, String search, String role,
                                                      Boolean active, Set<UUID> visibleIds) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("organization").get("id"), organizationId));
-            if (role != null) {
-                predicates.add(cb.equal(root.get("role"), role));
+            if (role != null && !role.isBlank()) {
+                predicates.add(cb.equal(root.get("role").get("name"), role));
             }
             if (active != null) {
                 predicates.add(cb.equal(root.get("active"), active));

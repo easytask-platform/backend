@@ -21,4 +21,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID>, JpaSpec
     long countByOrganizationId(UUID organizationId);
 
     long countByOrganizationIdAndActiveTrue(UUID organizationId);
+
+    long countByRoleId(UUID roleId);
+
+    boolean existsByIdAndActiveTrue(UUID id);
 }

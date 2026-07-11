@@ -8,6 +8,7 @@ import java.time.Duration;
 public record EasyTaskProperties(
         Jwt jwt,
         Duration refreshTokenTtl,
+        Duration passwordResetTtl,
         Storage storage
 ) {
 

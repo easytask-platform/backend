@@ -31,7 +31,7 @@ public class TeamController {
     private final TeamService teamService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('team:read')")
     public PageResponse<TeamResponse> list(@AuthenticationPrincipal AuthenticatedUser principal,
                                            @RequestParam(required = false) String search,
                                            @PageableDefault(sort = "name") Pageable pageable) {
@@ -39,7 +39,7 @@ public class TeamController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('team:manage')")
     @ResponseStatus(HttpStatus.CREATED)
     public TeamResponse create(@AuthenticationPrincipal AuthenticatedUser principal,
                                @Valid @RequestBody CreateTeamRequest request) {
@@ -47,7 +47,7 @@ public class TeamController {
     }
 
     @PatchMapping("/{teamId}")
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('team:manage')")
     public TeamResponse update(@AuthenticationPrincipal AuthenticatedUser principal,
                                @PathVariable UUID teamId,
                                @Valid @RequestBody UpdateTeamRequest request) {
@@ -55,14 +55,14 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}/members")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('team:read')")
     public ItemsResponse<TeamMemberResponse> members(@AuthenticationPrincipal AuthenticatedUser principal,
                                                      @PathVariable UUID teamId) {
         return teamService.members(principal, teamId);
     }
 
     @PostMapping("/{teamId}/members")
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('team:manage')")
     @ResponseStatus(HttpStatus.CREATED)
     public TeamMemberResponse addMember(@AuthenticationPrincipal AuthenticatedUser principal,
                                         @PathVariable UUID teamId,
@@ -71,7 +71,7 @@ public class TeamController {
     }
 
     @DeleteMapping("/{teamId}/members/{userId}")
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('team:manage')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeMember(@AuthenticationPrincipal AuthenticatedUser principal,
                              @PathVariable UUID teamId,

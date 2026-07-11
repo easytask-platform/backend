@@ -2,6 +2,7 @@ package com.easytask.backend.team;
 
 import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.common.ConflictException;
+import com.easytask.backend.role.DataScope;
 import com.easytask.backend.common.ItemsResponse;
 import com.easytask.backend.common.MembershipRole;
 import com.easytask.backend.common.NotFoundException;
@@ -9,7 +10,6 @@ import com.easytask.backend.common.PageResponse;
 import com.easytask.backend.organization.OrganizationRepository;
 import com.easytask.backend.user.AppUser;
 import com.easytask.backend.user.AppUserRepository;
-import com.easytask.backend.user.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,7 +33,7 @@ public class TeamService {
     @Transactional(readOnly = true)
     public PageResponse<TeamResponse> list(AuthenticatedUser principal, String search, Pageable pageable) {
         String effectiveSearch = search == null ? "" : search;
-        Page<Team> page = principal.role() == UserRole.ORGANIZATION_ADMIN
+        Page<Team> page = principal.scope() == DataScope.ORGANIZATION
                 ? teamRepository.findAllByOrganizationIdAndNameContainingIgnoreCase(
                         principal.organizationId(), effectiveSearch, pageable)
                 : teamRepository.findAllVisibleToMember(principal.organizationId(), principal.id(),
@@ -74,7 +74,7 @@ public class TeamService {
     @Transactional(readOnly = true)
     public ItemsResponse<TeamMemberResponse> members(AuthenticatedUser principal, UUID teamId) {
         Team team = requireTeam(principal, teamId);
-        if (principal.role() != UserRole.ORGANIZATION_ADMIN
+        if (principal.scope() != DataScope.ORGANIZATION
                 && !teamMemberRepository.existsByTeamIdAndUserId(team.getId(), principal.id())) {
             throw new NotFoundException("Team not found");
         }
@@ -93,7 +93,8 @@ public class TeamService {
             throw new ConflictException("User is already a member of this team");
         }
         // org-level managers manage the teams they join; everyone else is a plain member
-        MembershipRole teamRole = user.getRole() == UserRole.MANAGER ? MembershipRole.MANAGER : MembershipRole.MEMBER;
+        MembershipRole teamRole = user.getRole().getDataScope() == DataScope.MANAGED
+                ? MembershipRole.MANAGER : MembershipRole.MEMBER;
         teamMemberRepository.save(TeamMember.builder()
                 .team(team)
                 .user(user)

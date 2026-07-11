@@ -44,7 +44,7 @@ public class ProjectController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('project:manage')")
     @ResponseStatus(HttpStatus.CREATED)
     public ProjectResponse create(@AuthenticationPrincipal AuthenticatedUser principal,
                                   @Valid @RequestBody CreateProjectRequest request) {
@@ -58,7 +58,7 @@ public class ProjectController {
     }
 
     @PatchMapping("/{projectId}")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('project:manage')")
     public ProjectResponse update(@AuthenticationPrincipal AuthenticatedUser principal,
                                   @PathVariable UUID projectId,
                                   @Valid @RequestBody UpdateProjectRequest request) {
@@ -72,7 +72,7 @@ public class ProjectController {
     }
 
     @PostMapping("/{projectId}/members")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('project:manage')")
     @ResponseStatus(HttpStatus.CREATED)
     public ProjectMemberResponse addMember(@AuthenticationPrincipal AuthenticatedUser principal,
                                            @PathVariable UUID projectId,
@@ -81,7 +81,7 @@ public class ProjectController {
     }
 
     @DeleteMapping("/{projectId}/members/{userId}")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('project:manage')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeMember(@AuthenticationPrincipal AuthenticatedUser principal,
                              @PathVariable UUID projectId,

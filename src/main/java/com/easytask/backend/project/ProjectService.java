@@ -2,6 +2,7 @@ package com.easytask.backend.project;
 
 import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.common.ConflictException;
+import com.easytask.backend.role.DataScope;
 import com.easytask.backend.common.ItemsResponse;
 import com.easytask.backend.common.MembershipRole;
 import com.easytask.backend.common.NotFoundException;
@@ -13,7 +14,6 @@ import com.easytask.backend.task.TaskRepository;
 import com.easytask.backend.task.TaskStatus;
 import com.easytask.backend.user.AppUser;
 import com.easytask.backend.user.AppUserRepository;
-import com.easytask.backend.user.UserRole;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
@@ -87,7 +87,7 @@ public class ProjectService {
                 .build());
         long memberCount = 0;
         // a manager must be a managing member of their own project to keep seeing it
-        if (principal.role() == UserRole.MANAGER) {
+        if (principal.scope() != DataScope.ORGANIZATION) {
             projectMemberRepository.save(ProjectMember.builder()
                     .project(project)
                     .user(userRepository.getReferenceById(principal.id()))
@@ -140,7 +140,8 @@ public class ProjectService {
         if (projectMemberRepository.existsByProjectIdAndUserId(projectId, user.getId())) {
             throw new ConflictException("User is already a member of this project");
         }
-        MembershipRole role = user.getRole() == UserRole.MANAGER ? MembershipRole.MANAGER : MembershipRole.MEMBER;
+        MembershipRole role = user.getRole().getDataScope() == DataScope.MANAGED
+                ? MembershipRole.MANAGER : MembershipRole.MEMBER;
         projectMemberRepository.save(ProjectMember.builder()
                 .project(project)
                 .user(user)
@@ -190,7 +191,7 @@ public class ProjectService {
                 predicates.add(cb.like(cb.lower(root.get("name")),
                         "%" + search.toLowerCase(Locale.ROOT) + "%"));
             }
-            if (principal.role() != UserRole.ORGANIZATION_ADMIN) {
+            if (principal.scope() != DataScope.ORGANIZATION) {
                 Subquery<UUID> membership = query.subquery(UUID.class);
                 Root<ProjectMember> pm = membership.from(ProjectMember.class);
                 membership.select(pm.get("id"))

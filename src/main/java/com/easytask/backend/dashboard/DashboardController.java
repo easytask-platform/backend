@@ -25,19 +25,19 @@ public class DashboardController {
     private final ReportService reportService;
 
     @GetMapping("/dashboard/admin")
-    @PreAuthorize("hasRole('ORGANIZATION_ADMIN')")
+    @PreAuthorize("hasAuthority('dashboard:admin')")
     public AdminDashboardResponse adminDashboard(@AuthenticationPrincipal AuthenticatedUser principal) {
         return dashboardService.adminDashboard(principal);
     }
 
     @GetMapping("/dashboard/manager")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('dashboard:manager')")
     public ManagerDashboardResponse managerDashboard(@AuthenticationPrincipal AuthenticatedUser principal) {
         return dashboardService.managerDashboard(principal);
     }
 
     @GetMapping("/reports/workload")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('dashboard:manager')")
     public PageResponse<WorkloadItemResponse> workload(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) UUID teamId,
@@ -49,7 +49,7 @@ public class DashboardController {
     }
 
     @GetMapping("/reports/project-progress")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('dashboard:manager')")
     public PageResponse<ProjectProgressItemResponse> projectProgress(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) UUID projectId,

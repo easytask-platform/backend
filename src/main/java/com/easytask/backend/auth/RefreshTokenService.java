@@ -29,6 +29,7 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final EasyTaskProperties properties;
+    private final RefreshTokenReuseHandler reuseHandler;
 
     public String issue(AppUser user) {
         String rawToken = generateToken();
@@ -43,8 +44,18 @@ public class RefreshTokenService {
     public RotatedToken rotate(String rawToken) {
         Instant now = Instant.now();
         RefreshToken current = refreshTokenRepository.findByTokenHash(sha256(rawToken))
-                .filter(token -> token.isUsable(now))
                 .orElseThrow(() -> new UnauthenticatedException("Invalid refresh token"));
+        if (current.getRevokedAt() != null) {
+            // A revoked token being replayed means the rotation chain leaked
+            // (classic refresh-token theft signal): kill every session. The
+            // revocation runs in its own committed transaction so throwing
+            // here does not roll it back.
+            reuseHandler.revokeAllOnReuse(current.getUser().getId());
+            throw new UnauthenticatedException("Invalid refresh token");
+        }
+        if (!current.isUsable(now)) {
+            throw new UnauthenticatedException("Invalid refresh token");
+        }
         AppUser user = current.getUser();
         if (!user.isActive()) {
             throw new UnauthenticatedException("Account is deactivated");

@@ -4,8 +4,8 @@ import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.common.ForbiddenException;
 import com.easytask.backend.common.MembershipRole;
 import com.easytask.backend.common.NotFoundException;
+import com.easytask.backend.role.DataScope;
 import com.easytask.backend.task.TaskAssignmentRepository;
-import com.easytask.backend.user.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -34,19 +34,22 @@ public class ProjectAccessService {
     }
 
     public boolean isVisible(AuthenticatedUser principal, UUID projectId) {
-        return principal.role() == UserRole.ORGANIZATION_ADMIN
+        return principal.scope() == DataScope.ORGANIZATION
                 || projectMemberRepository.existsByProjectIdAndUserId(projectId, principal.id())
                 || taskAssignmentRepository.existsByTaskProjectIdAndAssigneeId(projectId, principal.id());
     }
 
-    /** Admins manage every project; managers only those where they hold the MANAGER membership role. */
+    /**
+     * Org-scoped roles manage every project; everyone else needs the MANAGER
+     * membership on the specific project (the legacy manager rule, applying
+     * to any role whose permissions allow project/task management).
+     */
     public void requireManagementRights(AuthenticatedUser principal, UUID projectId) {
-        if (principal.role() == UserRole.ORGANIZATION_ADMIN) {
+        if (principal.scope() == DataScope.ORGANIZATION) {
             return;
         }
-        if (principal.role() != UserRole.MANAGER
-                || !projectMemberRepository.existsByProjectIdAndUserIdAndProjectRole(
-                        projectId, principal.id(), MembershipRole.MANAGER)) {
+        if (!projectMemberRepository.existsByProjectIdAndUserIdAndProjectRole(
+                projectId, principal.id(), MembershipRole.MANAGER)) {
             throw new ForbiddenException("You do not manage this project");
         }
     }

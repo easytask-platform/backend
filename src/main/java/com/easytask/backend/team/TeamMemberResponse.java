@@ -1,7 +1,6 @@
 package com.easytask.backend.team;
 
 import com.easytask.backend.user.AppUser;
-import com.easytask.backend.user.UserRole;
 
 import java.util.UUID;
 
@@ -10,10 +9,10 @@ public record TeamMemberResponse(
         UUID id,
         String fullName,
         String email,
-        UserRole role
+        String role
 ) {
 
     public static TeamMemberResponse from(AppUser user) {
-        return new TeamMemberResponse(user.getId(), user.getFullName(), user.getEmail(), user.getRole());
+        return new TeamMemberResponse(user.getId(), user.getFullName(), user.getEmail(), user.getRole().getName());
     }
 }

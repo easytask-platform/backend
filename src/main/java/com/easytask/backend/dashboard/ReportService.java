@@ -2,6 +2,7 @@ package com.easytask.backend.dashboard;
 
 import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.common.MembershipRole;
+import com.easytask.backend.role.DataScope;
 import com.easytask.backend.common.NotFoundException;
 import com.easytask.backend.common.PageResponse;
 import com.easytask.backend.project.Project;
@@ -15,7 +16,6 @@ import com.easytask.backend.team.TeamRepository;
 import com.easytask.backend.timeentry.TimeEntryRepository;
 import com.easytask.backend.user.AppUser;
 import com.easytask.backend.user.AppUserRepository;
-import com.easytask.backend.user.UserRole;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -54,7 +54,7 @@ public class ReportService {
 
     /** Managed project ids for managers; {@code null} means "whole organization" (admin). */
     List<UUID> scopeProjectIds(AuthenticatedUser principal) {
-        if (principal.role() == UserRole.ORGANIZATION_ADMIN) {
+        if (principal.scope() == DataScope.ORGANIZATION) {
             return null;
         }
         return projectMemberRepository.findProjectIdsByUserAndRole(principal.id(), MembershipRole.MANAGER);
@@ -180,7 +180,7 @@ public class ReportService {
 
     /** Same manager visibility rule as GET /users: self + members of managed teams/projects. */
     private Set<UUID> visibleUserIdsOrNull(AuthenticatedUser principal) {
-        if (principal.role() == UserRole.ORGANIZATION_ADMIN) {
+        if (principal.scope() == DataScope.ORGANIZATION) {
             return null;
         }
         Set<UUID> ids = new HashSet<>();

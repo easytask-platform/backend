@@ -1,7 +1,8 @@
 package com.easytask.backend.task;
 
-import com.easytask.backend.user.UserRole;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 import static com.easytask.backend.task.TaskStatus.APPROVED;
 import static com.easytask.backend.task.TaskStatus.CANCELLED;
@@ -9,51 +10,72 @@ import static com.easytask.backend.task.TaskStatus.IN_PROGRESS;
 import static com.easytask.backend.task.TaskStatus.IN_REVIEW;
 import static com.easytask.backend.task.TaskStatus.REOPENED;
 import static com.easytask.backend.task.TaskStatus.TO_DO;
-import static com.easytask.backend.user.UserRole.EMPLOYEE;
-import static com.easytask.backend.user.UserRole.MANAGER;
-import static com.easytask.backend.user.UserRole.ORGANIZATION_ADMIN;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TaskStatusTransitionsTest {
 
+    /** The system Employee role's permission set. */
+    private static final Set<String> EXECUTE = Set.of("task:execute");
+
+    /** The reviewing permissions the Manager/Admin system roles hold. */
+    private static final Set<String> REVIEW_AND_CANCEL = Set.of("task:review", "task:cancel");
+
     @Test
-    void employeeAllowedTransitions() {
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, TO_DO, IN_PROGRESS)).isTrue();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, IN_PROGRESS, IN_REVIEW)).isTrue();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, REOPENED, IN_PROGRESS)).isTrue();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, REOPENED, IN_REVIEW)).isTrue();
+    void executePermissionAllowsEmployeeTransitions() {
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, TO_DO, IN_PROGRESS)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, IN_PROGRESS, IN_REVIEW)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, REOPENED, IN_PROGRESS)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, REOPENED, IN_REVIEW)).isTrue();
     }
 
     @Test
-    void employeeForbiddenTransitions() {
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, IN_REVIEW, APPROVED)).isFalse();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, IN_REVIEW, REOPENED)).isFalse();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, TO_DO, CANCELLED)).isFalse();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, TO_DO, IN_REVIEW)).isFalse();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, IN_PROGRESS, TO_DO)).isFalse();
-        assertThat(TaskStatusTransitions.isAllowed(EMPLOYEE, APPROVED, REOPENED)).isFalse();
+    void executePermissionForbidsReviewAndCancel() {
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, IN_REVIEW, APPROVED)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, IN_REVIEW, REOPENED)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, TO_DO, CANCELLED)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, TO_DO, IN_REVIEW)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, IN_PROGRESS, TO_DO)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(EXECUTE, APPROVED, REOPENED)).isFalse();
     }
 
     @Test
-    void managerAndAdminAllowedTransitions() {
-        for (UserRole role : new UserRole[]{MANAGER, ORGANIZATION_ADMIN}) {
-            assertThat(TaskStatusTransitions.isAllowed(role, IN_REVIEW, APPROVED)).isTrue();
-            assertThat(TaskStatusTransitions.isAllowed(role, IN_REVIEW, REOPENED)).isTrue();
-            assertThat(TaskStatusTransitions.isAllowed(role, TO_DO, CANCELLED)).isTrue();
-            assertThat(TaskStatusTransitions.isAllowed(role, IN_PROGRESS, CANCELLED)).isTrue();
-            assertThat(TaskStatusTransitions.isAllowed(role, IN_REVIEW, CANCELLED)).isTrue();
-            assertThat(TaskStatusTransitions.isAllowed(role, REOPENED, CANCELLED)).isTrue();
-        }
+    void reviewAndCancelPermissionsAllowManagerTransitions() {
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, IN_REVIEW, APPROVED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, IN_REVIEW, REOPENED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, TO_DO, CANCELLED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, IN_PROGRESS, CANCELLED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, IN_REVIEW, CANCELLED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, REOPENED, CANCELLED)).isTrue();
     }
 
     @Test
-    void managerAndAdminForbiddenTransitions() {
-        for (UserRole role : new UserRole[]{MANAGER, ORGANIZATION_ADMIN}) {
-            assertThat(TaskStatusTransitions.isAllowed(role, APPROVED, CANCELLED)).isFalse();
-            assertThat(TaskStatusTransitions.isAllowed(role, CANCELLED, CANCELLED)).isFalse();
-            assertThat(TaskStatusTransitions.isAllowed(role, TO_DO, IN_PROGRESS)).isFalse();
-            assertThat(TaskStatusTransitions.isAllowed(role, TO_DO, APPROVED)).isFalse();
-            assertThat(TaskStatusTransitions.isAllowed(role, APPROVED, REOPENED)).isFalse();
-        }
+    void reviewAndCancelPermissionsForbidOtherTransitions() {
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, APPROVED, CANCELLED)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, CANCELLED, CANCELLED)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, TO_DO, IN_PROGRESS)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, TO_DO, APPROVED)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(REVIEW_AND_CANCEL, APPROVED, REOPENED)).isFalse();
+    }
+
+    @Test
+    void reviewWithoutCancelCannotCancel() {
+        Set<String> reviewOnly = Set.of("task:review");
+        assertThat(TaskStatusTransitions.isAllowed(reviewOnly, IN_REVIEW, APPROVED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(reviewOnly, TO_DO, CANCELLED)).isFalse();
+    }
+
+    @Test
+    void combinedPermissionsUnionTheMatrices() {
+        Set<String> all = Set.of("task:execute", "task:review", "task:cancel");
+        assertThat(TaskStatusTransitions.isAllowed(all, TO_DO, IN_PROGRESS)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(all, IN_REVIEW, APPROVED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(all, IN_PROGRESS, CANCELLED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(all, APPROVED, CANCELLED)).isFalse();
+    }
+
+    @Test
+    void noPermissionsMeansNoTransitions() {
+        assertThat(TaskStatusTransitions.isAllowed(Set.of(), TO_DO, IN_PROGRESS)).isFalse();
+        assertThat(TaskStatusTransitions.isAllowed(Set.of(), IN_REVIEW, APPROVED)).isFalse();
     }
 }

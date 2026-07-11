@@ -16,7 +16,7 @@ import com.easytask.backend.project.ProjectMember;
 import com.easytask.backend.timeentry.TimeEntryRepository;
 import com.easytask.backend.user.AppUser;
 import com.easytask.backend.user.AppUserRepository;
-import com.easytask.backend.user.UserRole;
+import com.easytask.backend.role.DataScope;
 import jakarta.persistence.criteria.AbstractQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Predicate;
@@ -204,7 +204,7 @@ public class TaskService {
 
         TaskStatus from = task.getStatus();
         TaskStatus to = request.status();
-        if (!TaskStatusTransitions.isAllowed(principal.role(), from, to)) {
+        if (!TaskStatusTransitions.isAllowed(principal.permissions(), from, to)) {
             throw new ConflictException("Cannot transition task from %s to %s".formatted(from, to));
         }
 
@@ -244,12 +244,15 @@ public class TaskService {
         };
     }
 
-    /** Employees may only move their own assigned tasks; managers need management rights on the project. */
+    /**
+     * ASSIGNED scope may only move own assigned tasks; MANAGED scope needs
+     * management rights on the project; ORGANIZATION scope is unrestricted.
+     */
     private void requireStatusChangeRights(AuthenticatedUser principal, Task task) {
-        switch (principal.role()) {
-            case ORGANIZATION_ADMIN -> { /* full access */ }
-            case MANAGER -> projectAccessService.requireManagementRights(principal, task.getProject().getId());
-            case EMPLOYEE -> {
+        switch (principal.scope()) {
+            case ORGANIZATION -> { /* full access */ }
+            case MANAGED -> projectAccessService.requireManagementRights(principal, task.getProject().getId());
+            case ASSIGNED -> {
                 if (!taskAssignmentRepository.existsByTaskIdAndAssigneeId(task.getId(), principal.id())) {
                     throw new ForbiddenException("You can only update tasks assigned to you");
                 }
@@ -371,7 +374,7 @@ public class TaskService {
                         root.get("status").in(List.of(TaskStatus.APPROVED, TaskStatus.CANCELLED)).not());
                 predicates.add(filters.overdue() ? pastDue : cb.not(pastDue));
             }
-            if (principal.role() != UserRole.ORGANIZATION_ADMIN) {
+            if (principal.scope() != DataScope.ORGANIZATION) {
                 Subquery<UUID> membership = query.subquery(UUID.class);
                 Root<ProjectMember> pm = membership.from(ProjectMember.class);
                 membership.select(pm.get("id"))

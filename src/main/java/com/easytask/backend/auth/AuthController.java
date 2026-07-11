@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/auth/register-organization")
     @ResponseStatus(HttpStatus.CREATED)
@@ -41,6 +42,18 @@ public class AuthController {
     public void logout(@AuthenticationPrincipal AuthenticatedUser user,
                        @Valid @RequestBody LogoutRequest request) {
         authService.logout(user.id(), request);
+    }
+
+    @PostMapping("/auth/forgot-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetService.requestReset(request);
+    }
+
+    @PostMapping("/auth/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetPassword(request);
     }
 
     @GetMapping("/me")

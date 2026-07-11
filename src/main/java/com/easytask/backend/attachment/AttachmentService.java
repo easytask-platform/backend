@@ -59,15 +59,16 @@ public class AttachmentService {
         validateFile(file);
 
         AppUser uploader = userRepository.getReferenceById(principal.id());
+        // Independent random stored name: no insert-then-update dance, which
+        // breaks (unique-constraint) when several uploads share a transaction.
         TaskAttachment attachment = attachmentRepository.save(TaskAttachment.builder()
                 .task(task)
                 .uploader(uploader)
                 .originalFilename(sanitizeFilename(file.getOriginalFilename()))
-                .storedFilename("pending")
+                .storedFilename(UUID.randomUUID().toString())
                 .contentType(file.getContentType())
                 .fileSizeBytes(file.getSize())
                 .build());
-        attachment.setStoredFilename(attachment.getId().toString());
         storageService.store(file, attachment.getStoredFilename());
 
         activityService.log(task, uploader, ActivityEventType.ATTACHMENT_UPLOADED, null,

@@ -2,6 +2,7 @@ package com.easytask.backend.recurring;
 
 import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.common.NotFoundException;
+import com.easytask.backend.role.DataScope;
 import com.easytask.backend.common.PageResponse;
 import com.easytask.backend.common.ValidationException;
 import com.easytask.backend.project.Project;
@@ -13,7 +14,6 @@ import com.easytask.backend.task.TaskService;
 import com.easytask.backend.task.TaskPriority;
 import com.easytask.backend.user.AppUser;
 import com.easytask.backend.user.AppUserRepository;
-import com.easytask.backend.user.UserRole;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
@@ -101,7 +101,7 @@ public class RecurringTaskRuleService {
         RecurringTaskRule rule = ruleRepository.findByIdAndProjectOrganizationId(ruleId,
                         principal.organizationId())
                 .orElseThrow(() -> new NotFoundException("Recurring task rule not found"));
-        if (principal.role() != UserRole.ORGANIZATION_ADMIN
+        if (principal.scope() != DataScope.ORGANIZATION
                 && !projectAccessService.isVisible(principal, rule.getProject().getId())) {
             throw new NotFoundException("Recurring task rule not found");
         }
@@ -142,7 +142,7 @@ public class RecurringTaskRuleService {
             if (frequency != null) {
                 predicates.add(cb.equal(root.get("frequency"), frequency));
             }
-            if (principal.role() != UserRole.ORGANIZATION_ADMIN) {
+            if (principal.scope() != DataScope.ORGANIZATION) {
                 Subquery<UUID> membership = query.subquery(UUID.class);
                 Root<ProjectMember> pm = membership.from(ProjectMember.class);
                 membership.select(pm.get("id"))

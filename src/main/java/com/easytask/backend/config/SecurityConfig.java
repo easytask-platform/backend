@@ -41,7 +41,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/auth/register-organization",
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/refresh")
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password")
                         .permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())

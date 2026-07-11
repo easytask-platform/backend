@@ -3,8 +3,8 @@ package com.easytask.backend.task;
 import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.common.NotFoundException;
 import com.easytask.backend.project.ProjectAccessService;
+import com.easytask.backend.role.DataScope;
 import com.easytask.backend.user.AppUser;
-import com.easytask.backend.user.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -27,7 +27,7 @@ public class TaskAccessService {
     public Task getVisibleTask(AuthenticatedUser principal, UUID taskId) {
         Task task = taskRepository.findByIdAndProjectOrganizationId(taskId, principal.organizationId())
                 .orElseThrow(() -> new NotFoundException("Task not found"));
-        if (principal.role() != UserRole.ORGANIZATION_ADMIN
+        if (principal.scope() != DataScope.ORGANIZATION
                 && !taskAssignmentRepository.existsByTaskIdAndAssigneeId(taskId, principal.id())
                 && !projectAccessService.isVisible(principal, task.getProject().getId())) {
             throw new NotFoundException("Task not found");

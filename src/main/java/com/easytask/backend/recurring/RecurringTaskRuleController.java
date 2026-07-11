@@ -29,7 +29,7 @@ public class RecurringTaskRuleController {
     private final RecurringTaskRuleService ruleService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('recurring:manage')")
     public PageResponse<RecurringTaskRuleResponse> list(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) UUID projectId,
@@ -39,7 +39,7 @@ public class RecurringTaskRuleController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('recurring:manage')")
     @ResponseStatus(HttpStatus.CREATED)
     public RecurringTaskRuleResponse create(@AuthenticationPrincipal AuthenticatedUser principal,
                                             @Valid @RequestBody CreateRecurringTaskRuleRequest request) {
@@ -47,7 +47,7 @@ public class RecurringTaskRuleController {
     }
 
     @GetMapping("/{ruleId}/tasks")
-    @PreAuthorize("hasAnyRole('ORGANIZATION_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAuthority('recurring:manage')")
     public PageResponse<TaskListItemResponse> generatedTasks(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID ruleId,
