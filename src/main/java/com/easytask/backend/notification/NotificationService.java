@@ -5,6 +5,7 @@ import com.easytask.backend.common.PageResponse;
 import com.easytask.backend.task.Task;
 import com.easytask.backend.user.AppUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.util.UUID;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public PageResponse<NotificationResponse> list(UUID userId, Boolean read, Pageable pageable) {
@@ -58,12 +60,16 @@ public class NotificationService {
         recipients.stream()
                 .filter(recipient -> !recipient.getId().equals(actorId))
                 .distinct()
-                .forEach(recipient -> notificationRepository.save(Notification.builder()
-                        .recipient(recipient)
-                        .task(task)
-                        .type(type)
-                        .title(title)
-                        .message(message)
-                        .build()));
+                .forEach(recipient -> {
+                    Notification saved = notificationRepository.save(Notification.builder()
+                            .recipient(recipient)
+                            .task(task)
+                            .type(type)
+                            .title(title)
+                            .message(message)
+                            .build());
+                    eventPublisher.publishEvent(new NotificationCreatedEvent(
+                            saved.getId(), recipient.getId(), task.getId(), title, message));
+                });
     }
 }

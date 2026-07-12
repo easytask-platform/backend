@@ -42,6 +42,13 @@ Configuration (env vars, all optional in dev):
 | `REFRESH_TTL` | `14d` | Refresh token lifetime |
 | `STORAGE_DIR` | `./data/attachments` | Attachment file storage |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Dashboard dev origins |
+| `FIREBASE_CREDENTIALS` | *(unset — push disabled)* | Path to the Firebase service-account JSON; when set, FCM push notifications are sent for every created notification |
+
+To run with push enabled (the key file is gitignored, never committed):
+
+```bash
+FIREBASE_CREDENTIALS=$PWD/firebase-service-account.json ./mvnw spring-boot:run
+```
 
 ## Tests
 
