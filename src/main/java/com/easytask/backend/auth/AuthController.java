@@ -50,6 +50,13 @@ public class AuthController {
         passwordResetService.requestReset(request);
     }
 
+    /** Validates a code without consuming it — backs the standalone code page. */
+    @PostMapping("/auth/verify-reset-code")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void verifyResetCode(@Valid @RequestBody VerifyResetCodeRequest request) {
+        passwordResetService.verifyCode(request.token());
+    }
+
     @PostMapping("/auth/reset-password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {

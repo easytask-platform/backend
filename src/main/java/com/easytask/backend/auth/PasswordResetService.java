@@ -1,5 +1,6 @@
 package com.easytask.backend.auth;
 
+import com.easytask.backend.common.NotFoundException;
 import com.easytask.backend.common.UnauthenticatedException;
 import com.easytask.backend.common.logging.SecurityAuditLog;
 import com.easytask.backend.config.EasyTaskProperties;
@@ -42,19 +43,29 @@ public class PasswordResetService {
         var account = userRepository.findByEmailIgnoreCase(request.email())
                 .filter(AppUser::isActive);
         audit.passwordResetRequested(request.email(), account.isPresent());
-        account.ifPresent(user -> {
-                    Instant now = Instant.now();
-                    // A new request supersedes any outstanding token.
-                    resetTokenRepository.invalidateAllForUser(user.getId(), now);
-                    String rawToken = generateToken();
-                    resetTokenRepository.save(PasswordResetToken.builder()
-                            .user(user)
-                            .tokenHash(sha256(rawToken))
-                            .expiresAt(now.plus(properties.passwordResetTtl()))
-                            .build());
-                    mailer.sendResetToken(user, rawToken);
-                });
-        // Unknown or deactivated email: same 204 as success (no enumeration).
+        // Product decision (P3): tell the user plainly when the email is
+        // unknown instead of the anti-enumeration 204.
+        AppUser user = account.orElseThrow(
+                () -> new NotFoundException("No account found for this email"));
+        Instant now = Instant.now();
+        // A new request supersedes any outstanding token.
+        resetTokenRepository.invalidateAllForUser(user.getId(), now);
+        String rawToken = generateToken();
+        resetTokenRepository.save(PasswordResetToken.builder()
+                .user(user)
+                .tokenHash(sha256(rawToken))
+                .expiresAt(now.plus(properties.passwordResetTtl()))
+                .build());
+        mailer.sendResetToken(user, rawToken);
+    }
+
+    /** Code-page validation: usable token → 204; anything else → 401. */
+    @Transactional(readOnly = true)
+    public void verifyCode(String rawToken) {
+        Instant now = Instant.now();
+        resetTokenRepository.findByTokenHash(sha256(rawToken))
+                .filter(t -> t.isUsable(now) && t.getUser().isActive())
+                .orElseThrow(() -> new UnauthenticatedException("Invalid or expired code"));
     }
 
     /**

@@ -172,13 +172,45 @@ class PasswordResetIntegrationTest {
     }
 
     @Test
-    void unknownEmailStillReturns204AndSendsNothing() throws Exception {
-        requestReset("nobody-" + uniqueEmail());
+    void unknownEmailReturns404AndSendsNothing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email": "nobody-%s"}
+                                """.formatted(uniqueEmail())))
+                .andExpect(status().isNotFound());
         assertThat(LAST_TOKEN.get()).isNull();
     }
 
     @Test
     void garbageTokenIsRejected() throws Exception {
         resetPassword("definitely-not-a-token", "newPassword456", 401);
+    }
+
+    @Test
+    void verifyCodeValidatesWithoutConsuming() throws Exception {
+        String email = uniqueEmail();
+        registerOrganization(email);
+        requestReset(email);
+        String token = LAST_TOKEN.get();
+
+        // Valid code verifies (repeatedly — it is not consumed)...
+        verifyCode(token, 204);
+        verifyCode(token, 204);
+        // ...garbage does not.
+        verifyCode("wrong-code", 401);
+        // The code still works for the actual reset afterwards.
+        resetPassword(token, "newPassword456", 204);
+        // Once consumed, verification fails too.
+        verifyCode(token, 401);
+    }
+
+    private void verifyCode(String token, int expectedStatus) throws Exception {
+        mockMvc.perform(post("/api/v1/auth/verify-reset-code")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"token": "%s"}
+                                """.formatted(token)))
+                .andExpect(status().is(expectedStatus));
     }
 }
