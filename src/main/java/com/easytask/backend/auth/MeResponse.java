@@ -13,6 +13,7 @@ public record MeResponse(
         UUID roleId,
         DataScope scope,
         Set<String> permissions,
-        String organizationName
+        String organizationName,
+        boolean mustChangePassword
 ) {
 }

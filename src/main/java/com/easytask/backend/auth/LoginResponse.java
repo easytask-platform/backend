@@ -24,6 +24,7 @@ public record LoginResponse(
             UUID roleId,
             DataScope scope,
             Set<String> permissions,
-            String organizationName) {
+            String organizationName,
+            boolean mustChangePassword) {
     }
 }

@@ -55,6 +55,11 @@ public class AppUser {
     @Builder.Default
     private boolean active = true;
 
+    /** Set when an admin chose the password (create/reset); cleared once the user picks their own. */
+    @Column(name = "must_change_password", nullable = false)
+    @Builder.Default
+    private boolean mustChangePassword = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

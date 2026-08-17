@@ -23,7 +23,7 @@ class JwtServiceTest {
     private JwtService jwtService(Duration ttl) {
         return new JwtService(new EasyTaskProperties(
                 new EasyTaskProperties.Jwt(SECRET, ttl), Duration.ofDays(14),
-                Duration.ofMinutes(30), null));
+                Duration.ofMinutes(30), Duration.ofDays(7), null));
     }
 
     private AppUser user(UUID userId, UUID orgId, String roleName, DataScope scope,

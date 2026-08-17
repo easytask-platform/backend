@@ -9,6 +9,7 @@ public record EasyTaskProperties(
         Jwt jwt,
         Duration refreshTokenTtl,
         Duration passwordResetTtl,
+        Duration inviteTtl,
         Storage storage
 ) {
 

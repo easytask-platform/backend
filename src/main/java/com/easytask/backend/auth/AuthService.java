@@ -78,7 +78,8 @@ public class AuthService {
                 new LoginResponse.UserPayload(user.getId(), user.getFullName(), user.getEmail(),
                         role.getName(), role.getId(), role.getDataScope(),
                         Set.copyOf(role.getPermissions()),
-                        user.getOrganization().getName()),
+                        user.getOrganization().getName(),
+                        user.isMustChangePassword()),
                 jwtService.createAccessToken(user),
                 refreshTokenService.issue(user));
     }
@@ -103,7 +104,8 @@ public class AuthService {
         return new MeResponse(user.getId(), user.getFullName(), user.getEmail(),
                 role.getName(), role.getId(), role.getDataScope(),
                 Set.copyOf(role.getPermissions()),
-                user.getOrganization().getName());
+                user.getOrganization().getName(),
+                user.isMustChangePassword());
     }
 
     @Transactional
@@ -114,6 +116,8 @@ public class AuthService {
             throw new ForbiddenException("Current password is incorrect");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        // The user picked this password — any forced-change requirement is met.
+        user.setMustChangePassword(false);
         // changing the password invalidates every session; access tokens expire naturally
         refreshTokenRepository.revokeAllForUser(userId, Instant.now());
         audit.passwordChanged(userId);

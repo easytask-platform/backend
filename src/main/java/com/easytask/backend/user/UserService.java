@@ -1,6 +1,7 @@
 package com.easytask.backend.user;
 
 import com.easytask.backend.auth.AuthenticatedUser;
+import com.easytask.backend.auth.PasswordResetService;
 import com.easytask.backend.auth.RefreshTokenRepository;
 import com.easytask.backend.common.ConflictException;
 import com.easytask.backend.common.MembershipRole;
@@ -42,6 +43,7 @@ public class UserService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordResetService passwordResetService;
     private final SecurityAuditLog audit;
 
     @Transactional(readOnly = true)
@@ -76,14 +78,28 @@ public class UserService {
         if (role == null) {
             throw new ValidationException("Either roleId or role is required", java.util.Map.of());
         }
+        // P3-2 (D24): with a password → temporary, must be changed at first
+        // login; without → invitation email, the user sets their own.
+        boolean invited = request.initialPassword() == null || request.initialPassword().isBlank();
         AppUser user = userRepository.save(AppUser.builder()
                 .organization(organizationRepository.getReferenceById(principal.organizationId()))
                 .fullName(request.fullName())
                 .email(request.email().toLowerCase(Locale.ROOT))
-                .passwordHash(passwordEncoder.encode(request.initialPassword()))
+                .passwordHash(passwordEncoder.encode(invited ? randomUnusablePassword() : request.initialPassword()))
+                .mustChangePassword(!invited)
                 .role(role)
                 .build());
+        if (invited) {
+            passwordResetService.createInvitation(user, user.getOrganization().getName());
+        }
         return UserResponse.from(user);
+    }
+
+    /** Placeholder credential for invited users: random, never revealed to anyone. */
+    private static String randomUnusablePassword() {
+        byte[] bytes = new byte[32];
+        new java.security.SecureRandom().nextBytes(bytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     @Transactional
@@ -118,6 +134,8 @@ public class UserService {
             throw new ConflictException("Use the change-password endpoint for your own account");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        // Admin knows this password — the user must replace it on next login.
+        user.setMustChangePassword(true);
         refreshTokenRepository.revokeAllForUser(userId, Instant.now());
         audit.adminResetPassword(principal.id(), userId);
     }

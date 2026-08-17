@@ -57,6 +57,25 @@ public class PasswordResetService {
         // Unknown or deactivated email: same 204 as success (no enumeration).
     }
 
+    /**
+     * P3-2 (D24): invitation for a user created without a password. Reuses the
+     * reset-token mechanism with a longer TTL; the invitee redeems the code
+     * through the normal reset-password endpoint, which also serves as the
+     * accept-invite step.
+     */
+    @Transactional
+    public void createInvitation(AppUser user, String organizationName) {
+        Instant now = Instant.now();
+        resetTokenRepository.invalidateAllForUser(user.getId(), now);
+        String rawToken = generateToken();
+        resetTokenRepository.save(PasswordResetToken.builder()
+                .user(user)
+                .tokenHash(sha256(rawToken))
+                .expiresAt(now.plus(properties.inviteTtl()))
+                .build());
+        mailer.sendInvitation(user, organizationName, rawToken);
+    }
+
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         Instant now = Instant.now();
@@ -68,6 +87,8 @@ public class PasswordResetService {
             throw new UnauthenticatedException("Account is deactivated");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        // The user picked this password themselves (reset or invite acceptance).
+        user.setMustChangePassword(false);
         token.setUsedAt(now);
         // Every existing session dies with the old password.
         refreshTokenRepository.revokeAllForUser(user.getId(), now);

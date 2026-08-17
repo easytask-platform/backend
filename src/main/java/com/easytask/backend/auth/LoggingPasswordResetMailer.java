@@ -17,4 +17,9 @@ public class LoggingPasswordResetMailer implements PasswordResetMailer {
     public void sendResetToken(AppUser user, String rawToken) {
         log.info("Password reset requested for {} — reset code: {}", user.getEmail(), rawToken);
     }
+
+    @Override
+    public void sendInvitation(AppUser user, String organizationName, String rawToken) {
+        log.info("Invitation for {} to join {} — invite code: {}", user.getEmail(), organizationName, rawToken);
+    }
 }

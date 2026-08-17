@@ -41,9 +41,18 @@ class PasswordResetIntegrationTest {
         @Bean
         @Primary
         PasswordResetMailer capturingMailer() {
-            return (AppUser user, String rawToken) -> {
-                LAST_RECIPIENT.set(user.getEmail());
-                LAST_TOKEN.set(rawToken);
+            return new PasswordResetMailer() {
+                @Override
+                public void sendResetToken(AppUser user, String rawToken) {
+                    LAST_RECIPIENT.set(user.getEmail());
+                    LAST_TOKEN.set(rawToken);
+                }
+
+                @Override
+                public void sendInvitation(AppUser user, String organizationName, String rawToken) {
+                    LAST_RECIPIENT.set(user.getEmail());
+                    LAST_TOKEN.set(rawToken);
+                }
             };
         }
     }

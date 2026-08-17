@@ -47,4 +47,28 @@ public class SmtpPasswordResetMailer implements PasswordResetMailer {
         mailSender.send(message);
         log.info("Password reset email sent to {}", user.getEmail());
     }
+
+    @Override
+    public void sendInvitation(AppUser user, String organizationName, String rawToken) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(user.getEmail());
+        message.setSubject("You've been added to %s on EasyTask".formatted(organizationName));
+        message.setText("""
+                Hi %s,
+
+                An administrator added you to %s on EasyTask.
+                To activate your account, open the EasyTask app, choose
+                "Forgot password?", and use this code to set your own password:
+
+                    %s
+
+                The code is valid for 7 days and can be used once.
+                Your login email is this address.
+
+                — EasyTask
+                """.formatted(user.getFullName(), organizationName, rawToken));
+        mailSender.send(message);
+        log.info("Invitation email sent to {}", user.getEmail());
+    }
 }
