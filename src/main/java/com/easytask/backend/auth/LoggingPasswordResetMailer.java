@@ -3,14 +3,12 @@ package com.easytask.backend.auth;
 import com.easytask.backend.user.AppUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 /**
- * Dev/demo mailer: prints the reset code to the application log instead of
- * sending an email (this machine has no SMTP; container-based mail catchers
- * are unreachable behind the VPN firewall).
+ * Dev/demo fallback mailer: prints the reset code to the application log.
+ * Used automatically when no SMTP credentials are configured — see
+ * {@link com.easytask.backend.config.MailerConfiguration}.
  */
-@Component
 public class LoggingPasswordResetMailer implements PasswordResetMailer {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingPasswordResetMailer.class);
