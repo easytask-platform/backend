@@ -22,4 +22,14 @@ public class LoggingPasswordResetMailer implements PasswordResetMailer {
     public void sendInvitation(AppUser user, String organizationName, String rawToken) {
         log.info("Invitation for {} to join {} — invite code: {}", user.getEmail(), organizationName, rawToken);
     }
+
+    @Override
+    public void sendPasswordChangedNotice(AppUser user) {
+        log.info("Security notice (password changed) for {}", user.getEmail());
+    }
+
+    @Override
+    public void sendPasswordResetByAdminNotice(AppUser user) {
+        log.info("Security notice (admin reset) for {}", user.getEmail());
+    }
 }

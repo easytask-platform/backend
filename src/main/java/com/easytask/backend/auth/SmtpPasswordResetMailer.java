@@ -71,4 +71,49 @@ public class SmtpPasswordResetMailer implements PasswordResetMailer {
         mailSender.send(message);
         log.info("Invitation email sent to {}", user.getEmail());
     }
+
+    @Override
+    public void sendPasswordChangedNotice(AppUser user) {
+        sendNoticeQuietly(user, "EasyTask — your password was changed", """
+                Hi %s,
+
+                Your EasyTask password was changed just now.
+
+                If this was you, no action is needed. If it wasn't, contact
+                your organization administrator immediately.
+
+                — EasyTask
+                """.formatted(user.getFullName()));
+    }
+
+    @Override
+    public void sendPasswordResetByAdminNotice(AppUser user) {
+        sendNoticeQuietly(user, "EasyTask — your password was reset", """
+                Hi %s,
+
+                An administrator reset your EasyTask password. You will receive
+                the temporary password from them directly, and you'll be asked
+                to choose your own the next time you log in.
+
+                If you weren't expecting this, contact your organization
+                administrator.
+
+                — EasyTask
+                """.formatted(user.getFullName()));
+    }
+
+    /** Notices are best-effort: a mail hiccup must never fail the operation. */
+    private void sendNoticeQuietly(AppUser user, String subject, String text) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromAddress);
+            message.setTo(user.getEmail());
+            message.setSubject(subject);
+            message.setText(text);
+            mailSender.send(message);
+            log.info("Security notice '{}' sent to {}", subject, user.getEmail());
+        } catch (Exception e) {
+            log.warn("Could not send security notice to {}: {}", user.getEmail(), e.getMessage());
+        }
+    }
 }

@@ -31,6 +31,7 @@ public class AuthService {
     private final RoleProvisioningService roleProvisioningService;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordResetMailer mailer;
     private final SecurityAuditLog audit;
 
     @Transactional
@@ -121,5 +122,6 @@ public class AuthService {
         // changing the password invalidates every session; access tokens expire naturally
         refreshTokenRepository.revokeAllForUser(userId, Instant.now());
         audit.passwordChanged(userId);
+        mailer.sendPasswordChangedNotice(user);
     }
 }

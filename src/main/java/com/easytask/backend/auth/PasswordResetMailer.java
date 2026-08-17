@@ -13,4 +13,16 @@ public interface PasswordResetMailer {
 
     /** P3-2 (D24): "you've been added — set your password" invitation. */
     void sendInvitation(AppUser user, String organizationName, String rawToken);
+
+    /**
+     * Security notice after any password change — contains no secrets, exists
+     * so a victim learns fast if someone else changed their password.
+     * Default no-op: only real mailers need to care.
+     */
+    default void sendPasswordChangedNotice(AppUser user) {
+    }
+
+    /** Security notice when an administrator resets the user's password. */
+    default void sendPasswordResetByAdminNotice(AppUser user) {
+    }
 }

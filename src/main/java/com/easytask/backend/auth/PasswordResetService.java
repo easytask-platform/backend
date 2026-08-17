@@ -93,6 +93,7 @@ public class PasswordResetService {
         // Every existing session dies with the old password.
         refreshTokenRepository.revokeAllForUser(user.getId(), now);
         audit.passwordResetCompleted(user.getId());
+        mailer.sendPasswordChangedNotice(user);
     }
 
     private static String generateToken() {

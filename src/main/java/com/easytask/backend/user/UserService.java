@@ -1,6 +1,7 @@
 package com.easytask.backend.user;
 
 import com.easytask.backend.auth.AuthenticatedUser;
+import com.easytask.backend.auth.PasswordResetMailer;
 import com.easytask.backend.auth.PasswordResetService;
 import com.easytask.backend.auth.RefreshTokenRepository;
 import com.easytask.backend.common.ConflictException;
@@ -44,6 +45,7 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final PasswordResetService passwordResetService;
+    private final PasswordResetMailer mailer;
     private final SecurityAuditLog audit;
 
     @Transactional(readOnly = true)
@@ -138,6 +140,7 @@ public class UserService {
         user.setMustChangePassword(true);
         refreshTokenRepository.revokeAllForUser(userId, Instant.now());
         audit.adminResetPassword(principal.id(), userId);
+        mailer.sendPasswordResetByAdminNotice(user);
     }
 
     @Transactional
