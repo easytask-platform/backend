@@ -16,13 +16,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.HexFormat;
 
 /**
- * Forgot-password flow (B2). Tokens are opaque random strings stored
- * SHA-256-hashed, single-use, with a short TTL. The request endpoint never
- * reveals whether the email exists.
+ * Forgot-password flow (B2, reshaped in P3). Codes are 6-digit numbers
+ * stored SHA-256-hashed, single-use, short TTL, rate-limited; unknown
+ * emails get a plain 404 (product decision over anti-enumeration).
  */
 @Service
 @RequiredArgsConstructor
@@ -50,7 +49,7 @@ public class PasswordResetService {
         Instant now = Instant.now();
         // A new request supersedes any outstanding token.
         resetTokenRepository.invalidateAllForUser(user.getId(), now);
-        String rawToken = generateToken();
+        String rawToken = generateCode();
         resetTokenRepository.save(PasswordResetToken.builder()
                 .user(user)
                 .tokenHash(sha256(rawToken))
@@ -78,7 +77,7 @@ public class PasswordResetService {
     public void createInvitation(AppUser user, String organizationName) {
         Instant now = Instant.now();
         resetTokenRepository.invalidateAllForUser(user.getId(), now);
-        String rawToken = generateToken();
+        String rawToken = generateCode();
         resetTokenRepository.save(PasswordResetToken.builder()
                 .user(user)
                 .tokenHash(sha256(rawToken))
@@ -107,10 +106,20 @@ public class PasswordResetService {
         mailer.sendPasswordChangedNotice(user);
     }
 
-    private static String generateToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    /**
+     * 6-digit numeric code (P3 UX — typable from an email). token_hash is
+     * UNIQUE across ALL rows (incl. consumed ones), so retry on the rare
+     * collision. Low entropy is compensated by the short TTL, single-use
+     * semantics, and rate limiting on all three code endpoints.
+     */
+    private String generateCode() {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            String code = String.format("%06d", RANDOM.nextInt(1_000_000));
+            if (resetTokenRepository.findByTokenHash(sha256(code)).isEmpty()) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Could not generate a unique reset code");
     }
 
     private static String sha256(String value) {

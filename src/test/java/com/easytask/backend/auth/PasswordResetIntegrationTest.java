@@ -128,7 +128,8 @@ class PasswordResetIntegrationTest {
         requestReset(email);
         assertThat(LAST_RECIPIENT.get()).isEqualTo(email.toLowerCase());
         String token = LAST_TOKEN.get();
-        assertThat(token).isNotBlank();
+        // P3 UX: codes are 6 numeric digits, typable from the email.
+        assertThat(token).matches("\\d{6}");
 
         resetPassword(token, "newPassword456", 204);
 
