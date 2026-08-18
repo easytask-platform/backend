@@ -100,8 +100,11 @@ class RecurringTaskIntegrationTest extends IntegrationTestSupport {
     @Test
     void generationCreatesTasksWithAssignmentsAndAdvancesSchedule() throws Exception {
         Fixture fx = fixture("Gen Org");
-        // due since yesterday, daily -> catch-up should create 2 instances (yesterday + today)
-        String ruleId = createRule(fx, "Daily standup notes", LocalDate.now().minusDays(1), null, "DAILY");
+        // due since yesterday, daily -> catch-up should create 2 instances (yesterday + today).
+        // UTC, not the system zone: run dates are UTC-midnight instants, so between local
+        // midnight and UTC midnight a local "today" would not be due yet.
+        String ruleId = createRule(fx, "Daily standup notes",
+                LocalDate.now(java.time.ZoneOffset.UTC).minusDays(1), null, "DAILY");
 
         generationService.generateDueTasks();
 

@@ -16,6 +16,7 @@ public record UpdateTaskRequest(
         LocalDate startDate,
         LocalDate dueDate,
         @Positive BigDecimal estimatedHours,
-        List<UUID> assigneeIds
+        List<UUID> assigneeIds,
+        List<UUID> tagIds
 ) {
 }

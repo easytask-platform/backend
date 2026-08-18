@@ -2,6 +2,7 @@ package com.easytask.backend.task;
 
 import com.easytask.backend.project.Project;
 import com.easytask.backend.recurring.RecurringTaskRule;
+import com.easytask.backend.tag.Tag;
 import com.easytask.backend.user.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,6 +11,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -24,6 +27,8 @@ import org.hibernate.annotations.UuidGenerator;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -82,6 +87,21 @@ public class Task {
 
     @Column(name = "approved_at")
     private Instant approvedAt;
+
+    /** Blocked/waiting flag (D37) — orthogonal to the status machine. */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean blocked = false;
+
+    @Column(name = "blocked_reason", length = 300)
+    private String blockedReason;
+
+    @ManyToMany
+    @JoinTable(name = "task_tags",
+            joinColumns = @JoinColumn(name = "task_id"),
+            inverseJoinColumns = @JoinColumn(name = "tag_id"))
+    @Builder.Default
+    private Set<Tag> tags = new HashSet<>();
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

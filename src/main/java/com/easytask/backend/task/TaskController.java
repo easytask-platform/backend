@@ -38,13 +38,14 @@ public class TaskController {
             @RequestParam(required = false) TaskPriority priority,
             @RequestParam(required = false) UUID projectId,
             @RequestParam(required = false) UUID assigneeId,
+            @RequestParam(required = false) UUID tagId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueTo,
             @RequestParam(required = false) Boolean overdue,
             @PageableDefault(sort = "createdAt") Pageable pageable) {
         return taskService.list(principal,
-                new TaskService.TaskFilters(search, status, priority, projectId, assigneeId, dueFrom, dueTo,
-                        overdue),
+                new TaskService.TaskFilters(search, status, priority, projectId, assigneeId, tagId, dueFrom,
+                        dueTo, overdue),
                 pageable);
     }
 
@@ -68,6 +69,14 @@ public class TaskController {
                                      @PathVariable UUID taskId,
                                      @Valid @RequestBody UpdateTaskRequest request) {
         return taskService.update(principal, taskId, request);
+    }
+
+    /** No {@code @PreAuthorize}: assignees without task:manage may block/unblock their tasks (D37). */
+    @PatchMapping("/{taskId}/blocked")
+    public TaskDetailResponse setBlocked(@AuthenticationPrincipal AuthenticatedUser principal,
+                                         @PathVariable UUID taskId,
+                                         @Valid @RequestBody UpdateTaskBlockedRequest request) {
+        return taskService.setBlocked(principal, taskId, request);
     }
 
     @PatchMapping("/{taskId}/status")

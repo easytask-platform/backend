@@ -34,8 +34,9 @@ public class StorageService {
 
     public void store(MultipartFile file, String storedFilename) {
         try {
-            Files.copy(file.getInputStream(), root.resolve(storedFilename),
-                    StandardCopyOption.REPLACE_EXISTING);
+            Path target = root.resolve(storedFilename);
+            Files.createDirectories(target.getParent());
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to store attachment", e);
         }

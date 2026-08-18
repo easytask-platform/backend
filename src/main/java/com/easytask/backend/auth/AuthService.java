@@ -10,6 +10,7 @@ import com.easytask.backend.role.Role;
 import com.easytask.backend.role.RoleProvisioningService;
 import com.easytask.backend.user.AppUser;
 import com.easytask.backend.user.AppUserRepository;
+import com.easytask.backend.user.AvatarUrls;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -80,7 +81,8 @@ public class AuthService {
                         role.getName(), role.getId(), role.getDataScope(),
                         Set.copyOf(role.getPermissions()),
                         user.getOrganization().getName(),
-                        user.isMustChangePassword()),
+                        user.isMustChangePassword(),
+                        AvatarUrls.of(user)),
                 jwtService.createAccessToken(user),
                 refreshTokenService.issue(user));
     }
@@ -106,7 +108,8 @@ public class AuthService {
                 role.getName(), role.getId(), role.getDataScope(),
                 Set.copyOf(role.getPermissions()),
                 user.getOrganization().getName(),
-                user.isMustChangePassword());
+                user.isMustChangePassword(),
+                AvatarUrls.of(user));
     }
 
     @Transactional

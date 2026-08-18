@@ -35,7 +35,7 @@ public class CommentController {
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse create(@AuthenticationPrincipal AuthenticatedUser principal,
                                   @PathVariable UUID taskId,
-                                  @Valid @RequestBody CommentTextRequest request) {
+                                  @Valid @RequestBody CreateCommentRequest request) {
         return commentService.create(principal, taskId, request);
     }
 

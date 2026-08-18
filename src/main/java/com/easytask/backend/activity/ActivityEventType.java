@@ -9,5 +9,9 @@ public enum ActivityEventType {
     COMMENT_POSTED,
     ATTACHMENT_UPLOADED,
     TIME_LOGGED,
-    TASK_APPROVED
+    TASK_APPROVED,
+    TAG_ADDED,
+    TAG_REMOVED,
+    TASK_BLOCKED,
+    TASK_UNBLOCKED
 }

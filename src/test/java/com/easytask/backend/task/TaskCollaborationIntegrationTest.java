@@ -2,8 +2,13 @@ package com.easytask.backend.task;
 
 import com.easytask.backend.IntegrationTestSupport;
 import com.easytask.backend.TestDatabaseConfiguration;
+import com.easytask.backend.notification.Notification;
+import com.easytask.backend.notification.NotificationRepository;
+import com.easytask.backend.notification.NotificationType;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -12,6 +17,7 @@ import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.JsonNode;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -31,8 +37,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestDatabaseConfiguration.class)
 class TaskCollaborationIntegrationTest extends IntegrationTestSupport {
 
+    @Autowired
+    private NotificationRepository notificationRepository;
+
     private record Fixture(String adminToken, String managerToken, String employeeToken,
                            String managerId, String employeeId, String projectId, String taskId) {
+    }
+
+    /** Notifications for the user, minus the TASK_ASSIGNED one from the fixture's task creation. */
+    private List<Notification> commentNotificationsFor(String userId) {
+        return notificationRepository
+                .findAllByRecipientId(UUID.fromString(userId), Pageable.unpaged()).getContent().stream()
+                .filter(notification -> notification.getType() != NotificationType.TASK_ASSIGNED)
+                .toList();
     }
 
     private Fixture fixture(String orgName) throws Exception {
@@ -116,6 +133,159 @@ class TaskCollaborationIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(get("/api/v1/tasks/" + fx.taskId() + "/comments")
                         .header("Authorization", "Bearer " + fx.employeeToken()))
                 .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void replyLifecycleValidationAndCascadeDelete() throws Exception {
+        Fixture fx = fixture("Reply Org");
+
+        String parentId = exchange(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.employeeToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Top-level comment."}
+                                """),
+                201).path("id").asText();
+
+        JsonNode reply = exchange(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.managerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Replying to you.", "parentCommentId": "%s"}
+                                """.formatted(parentId)),
+                201);
+        assertThat(reply.path("parentCommentId").asText()).isEqualTo(parentId);
+        String replyId = reply.path("id").asText();
+
+        // flat list carries parentCommentId (null for top-level)
+        mockMvc.perform(get("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.employeeToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].parentCommentId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.items[1].parentCommentId").value(parentId));
+
+        // one-level threading: replying to a reply is rejected
+        mockMvc.perform(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.employeeToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Too deep.", "parentCommentId": "%s"}
+                                """.formatted(replyId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fields.parentCommentId").exists());
+
+        // parent must be a comment on the same task
+        String otherTaskId = exchange(post("/api/v1/tasks").header("Authorization", "Bearer " + fx.managerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"projectId": "%s", "title": "Other task", "assigneeIds": ["%s"]}
+                                """.formatted(fx.projectId(), fx.employeeId())),
+                201).path("id").asText();
+        mockMvc.perform(post("/api/v1/tasks/" + otherTaskId + "/comments")
+                        .header("Authorization", "Bearer " + fx.employeeToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Cross-task reply.", "parentCommentId": "%s"}
+                                """.formatted(parentId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fields.parentCommentId").exists());
+
+        // deleting the parent cascades to its replies
+        mockMvc.perform(delete("/api/v1/comments/" + parentId)
+                        .header("Authorization", "Bearer " + fx.employeeToken()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.employeeToken()))
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void replyNotifiesParentAuthorInsteadOfCommentAdded() throws Exception {
+        Fixture fx = fixture("Reply Notify Org");
+
+        // employee's top-level comment: manager (task creator) gets the generic fan-out
+        String parentId = exchange(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.employeeToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Top-level comment."}
+                                """),
+                201).path("id").asText();
+
+        exchange(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.managerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Replying to you.", "parentCommentId": "%s"}
+                                """.formatted(parentId)),
+                201);
+
+        // parent author gets COMMENT_REPLIED only — excluded from COMMENT_ADDED
+        List<Notification> employeeNotifications = commentNotificationsFor(fx.employeeId());
+        assertThat(employeeNotifications).hasSize(1);
+        assertThat(employeeNotifications.get(0).getType()).isEqualTo(NotificationType.COMMENT_REPLIED);
+        assertThat(employeeNotifications.get(0).getMessage())
+                .isEqualTo("Mona Manager replied to your comment on task 'Collab task'");
+
+        // manager only has the COMMENT_ADDED from the employee's comment, nothing for own reply
+        var managerTypes = commentNotificationsFor(fx.managerId()).stream().map(Notification::getType).toList();
+        assertThat(managerTypes).containsExactly(NotificationType.COMMENT_ADDED);
+    }
+
+    @Test
+    void mentionsNotifyAndValidateVisibility() throws Exception {
+        Fixture fx = fixture("Mention Org");
+
+        // manager mentions the employee: COMMENT_MENTION only, no COMMENT_ADDED double
+        exchange(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.managerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Ping @Sam Employee", "mentionedUserIds": ["%s"]}
+                                """.formatted(fx.employeeId())),
+                201);
+        List<Notification> employeeNotifications = commentNotificationsFor(fx.employeeId());
+        assertThat(employeeNotifications).hasSize(1);
+        assertThat(employeeNotifications.get(0).getType()).isEqualTo(NotificationType.COMMENT_MENTION);
+        assertThat(employeeNotifications.get(0).getMessage())
+                .isEqualTo("You were mentioned in a comment on task 'Collab task'");
+        assertThat(commentNotificationsFor(fx.managerId())).isEmpty();
+
+        // self-mention is silently ignored: no notification for the actor
+        exchange(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.employeeToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Note to self", "mentionedUserIds": ["%s"]}
+                                """.formatted(fx.employeeId())),
+                201);
+        assertThat(commentNotificationsFor(fx.employeeId())).hasSize(1);
+
+        // same-org user without task visibility cannot be mentioned
+        String outsiderId = createUser(fx.adminToken(), "Out Sider", uniqueEmail(), "EMPLOYEE");
+        mockMvc.perform(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.managerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Ping @Out Sider", "mentionedUserIds": ["%s"]}
+                                """.formatted(outsiderId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fields.mentionedUserIds").exists());
+        assertThat(commentNotificationsFor(outsiderId)).isEmpty();
+
+        // unknown / other-org id is rejected the same way
+        mockMvc.perform(post("/api/v1/tasks/" + fx.taskId() + "/comments")
+                        .header("Authorization", "Bearer " + fx.managerToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Ping @nobody", "mentionedUserIds": ["%s"]}
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.mentionedUserIds").exists());
     }
 
     @Test

@@ -60,6 +60,10 @@ public class AppUser {
     @Builder.Default
     private boolean mustChangePassword = false;
 
+    /** Stored avatar file name under avatars/ (UUID + extension); null = no avatar. */
+    @Column(name = "avatar_filename", length = 64)
+    private String avatarFilename;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

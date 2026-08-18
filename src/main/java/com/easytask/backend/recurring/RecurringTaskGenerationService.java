@@ -37,6 +37,7 @@ public class RecurringTaskGenerationService {
 
     private final RecurringTaskRuleRepository ruleRepository;
     private final RecurringTaskRuleAssigneeRepository ruleAssigneeRepository;
+    private final RecurringTaskRuleExceptionRepository exceptionRepository;
     private final TaskRepository taskRepository;
     private final TaskAssignmentRepository taskAssignmentRepository;
     private final ActivityService activityService;
@@ -62,15 +63,22 @@ public class RecurringTaskGenerationService {
                 .map(RecurringTaskRuleAssignee::getUser)
                 .toList();
         int generated = 0;
+        int iterations = 0;
         while (rule.isActive() && rule.getNextRunAt() != null && !rule.getNextRunAt().isAfter(now)
-                && generated < MAX_CATCH_UP) {
+                && iterations < MAX_CATCH_UP) {
+            iterations++;
             LocalDate runDate = rule.getNextRunAt().atZone(ZoneOffset.UTC).toLocalDate();
             if (rule.getRecurrenceEndDate() != null && runDate.isAfter(rule.getRecurrenceEndDate())) {
                 rule.setActive(false);
                 break;
             }
-            createInstance(rule, runDate, assignees);
-            generated++;
+            // AF-11: a skipped run-date produces no task, but the schedule still advances.
+            if (exceptionRepository.existsByRuleIdAndExceptionDate(rule.getId(), runDate)) {
+                log.debug("Recurring rule {} skips {} (exception)", rule.getId(), runDate);
+            } else {
+                createInstance(rule, runDate, assignees);
+                generated++;
+            }
 
             LocalDate nextRun = nextRunDate(runDate, rule.getFrequency(), rule.getRecurrenceInterval());
             rule.setNextRunAt(nextRun.atStartOfDay(ZoneOffset.UTC).toInstant());

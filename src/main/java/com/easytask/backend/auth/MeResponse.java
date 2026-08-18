@@ -14,6 +14,7 @@ public record MeResponse(
         DataScope scope,
         Set<String> permissions,
         String organizationName,
-        boolean mustChangePassword
+        boolean mustChangePassword,
+        String avatarUrl
 ) {
 }

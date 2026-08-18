@@ -1,6 +1,8 @@
 package com.easytask.backend.recurring;
 
 import com.easytask.backend.auth.AuthenticatedUser;
+import com.easytask.backend.common.ConflictException;
+import com.easytask.backend.common.ItemsResponse;
 import com.easytask.backend.common.NotFoundException;
 import com.easytask.backend.role.DataScope;
 import com.easytask.backend.common.PageResponse;
@@ -24,6 +26,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -38,12 +41,17 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RecurringTaskRuleService {
 
+    /** Safety cap on the occurrence list length. */
+    static final int MAX_OCCURRENCES = 50;
+
     private final RecurringTaskRuleRepository ruleRepository;
     private final RecurringTaskRuleAssigneeRepository ruleAssigneeRepository;
+    private final RecurringTaskRuleExceptionRepository exceptionRepository;
     private final TaskRepository taskRepository;
     private final TaskService taskService;
     private final AppUserRepository userRepository;
     private final ProjectAccessService projectAccessService;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public PageResponse<RecurringTaskRuleResponse> list(AuthenticatedUser principal, UUID projectId,
@@ -105,7 +113,102 @@ public class RecurringTaskRuleService {
                 && !projectAccessService.isVisible(principal, rule.getProject().getId())) {
             throw new NotFoundException("Recurring task rule not found");
         }
-        return taskService.toListResponse(taskRepository.findAllByRecurringTaskRuleId(ruleId, pageable));
+        return taskService.toListResponse(principal, taskRepository.findAllByRecurringTaskRuleId(ruleId, pageable));
+    }
+
+    // --- Occurrences + exceptions (P4-10, D41) --------------------------------
+
+    /** The next {@code count} upcoming run dates from {@code nextRunAt}, each flagged when skipped. */
+    @Transactional(readOnly = true)
+    public ItemsResponse<OccurrenceResponse> occurrences(AuthenticatedUser principal, UUID ruleId, int count) {
+        RecurringTaskRule rule = requireManagedRule(principal, ruleId);
+        Set<LocalDate> exceptions = exceptionRepository.exceptionDates(ruleId);
+        List<OccurrenceResponse> items = upcomingRunDates(rule, count).stream()
+                .map(date -> new OccurrenceResponse(date, exceptions.contains(date)))
+                .toList();
+        return new ItemsResponse<>(items);
+    }
+
+    /** Skip a future, not-yet-generated run date. 409 if the date is in the past or not an actual occurrence. */
+    @Transactional
+    public void addException(AuthenticatedUser principal, UUID ruleId, LocalDate date) {
+        RecurringTaskRule rule = requireManagedRule(principal, ruleId);
+        LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
+        if (!date.isAfter(today.minusDays(1))) {
+            // date in the past (or today, already due) — cannot be skipped
+            throw new ConflictException("Only a future run date can be skipped");
+        }
+        if (!isScheduledRunDate(rule, date)) {
+            throw new ConflictException("That date is not a scheduled run date for this rule");
+        }
+        if (exceptionRepository.existsByRuleIdAndExceptionDate(ruleId, date)) {
+            return; // idempotent
+        }
+        exceptionRepository.save(RecurringTaskRuleException.builder()
+                .rule(rule)
+                .exceptionDate(date)
+                .createdBy(userRepository.getReferenceById(principal.id()))
+                .build());
+    }
+
+    @Transactional
+    public void removeException(AuthenticatedUser principal, UUID ruleId, LocalDate date) {
+        requireManagedRule(principal, ruleId);
+        exceptionRepository.findByRuleIdAndExceptionDate(ruleId, date)
+                .ifPresent(exceptionRepository::delete);
+    }
+
+    private RecurringTaskRule requireManagedRule(AuthenticatedUser principal, UUID ruleId) {
+        RecurringTaskRule rule = ruleRepository.findByIdAndProjectOrganizationId(ruleId,
+                        principal.organizationId())
+                .orElseThrow(() -> new NotFoundException("Recurring task rule not found"));
+        if (principal.scope() != DataScope.ORGANIZATION
+                && !projectAccessService.isVisible(principal, rule.getProject().getId())) {
+            throw new NotFoundException("Recurring task rule not found");
+        }
+        return rule;
+    }
+
+    /** Computes the upcoming run dates from {@code nextRunAt}, honouring end date and interval. */
+    private List<LocalDate> upcomingRunDates(RecurringTaskRule rule, int count) {
+        int capped = Math.min(Math.max(1, count), MAX_OCCURRENCES);
+        List<LocalDate> dates = new ArrayList<>();
+        if (!rule.isActive() || rule.getNextRunAt() == null) {
+            return dates;
+        }
+        LocalDate runDate = rule.getNextRunAt().atZone(ZoneOffset.UTC).toLocalDate();
+        while (dates.size() < capped) {
+            if (rule.getRecurrenceEndDate() != null && runDate.isAfter(rule.getRecurrenceEndDate())) {
+                break;
+            }
+            dates.add(runDate);
+            runDate = RecurringTaskGenerationService.nextRunDate(runDate, rule.getFrequency(),
+                    rule.getRecurrenceInterval());
+        }
+        return dates;
+    }
+
+    /** A date is a scheduled run date if it appears in the (bounded) upcoming occurrence stream. */
+    private boolean isScheduledRunDate(RecurringTaskRule rule, LocalDate date) {
+        if (!rule.isActive() || rule.getNextRunAt() == null) {
+            return false;
+        }
+        if (rule.getRecurrenceEndDate() != null && date.isAfter(rule.getRecurrenceEndDate())) {
+            return false;
+        }
+        LocalDate runDate = rule.getNextRunAt().atZone(ZoneOffset.UTC).toLocalDate();
+        if (date.isBefore(runDate)) {
+            return false;
+        }
+        // Walk the schedule until we reach or pass the target date (bounded by MAX_OCCURRENCES * cushion).
+        for (int i = 0; i < MAX_OCCURRENCES * 12 && !runDate.isAfter(date); i++) {
+            if (runDate.equals(date)) {
+                return true;
+            }
+            runDate = RecurringTaskGenerationService.nextRunDate(runDate, rule.getFrequency(),
+                    rule.getRecurrenceInterval());
+        }
+        return false;
     }
 
     private void validateDates(CreateRecurringTaskRuleRequest request) {

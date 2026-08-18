@@ -34,9 +34,14 @@ public class ProjectAccessService {
     }
 
     public boolean isVisible(AuthenticatedUser principal, UUID projectId) {
-        return principal.scope() == DataScope.ORGANIZATION
-                || projectMemberRepository.existsByProjectIdAndUserId(projectId, principal.id())
-                || taskAssignmentRepository.existsByTaskProjectIdAndAssigneeId(projectId, principal.id());
+        return isVisibleTo(principal.id(), principal.scope(), projectId);
+    }
+
+    /** Same visibility rule for an arbitrary user (used to validate @mentions, D35). */
+    public boolean isVisibleTo(UUID userId, DataScope scope, UUID projectId) {
+        return scope == DataScope.ORGANIZATION
+                || projectMemberRepository.existsByProjectIdAndUserId(projectId, userId)
+                || taskAssignmentRepository.existsByTaskProjectIdAndAssigneeId(projectId, userId);
     }
 
     /**

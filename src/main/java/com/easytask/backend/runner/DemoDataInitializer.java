@@ -2,11 +2,15 @@ package com.easytask.backend.runner;
 
 import com.easytask.backend.attachment.AttachmentService;
 import com.easytask.backend.auth.AuthService;
+import com.easytask.backend.checklist.ChecklistService;
+import com.easytask.backend.checklist.CreateChecklistItemRequest;
+import com.easytask.backend.checklist.UpdateChecklistItemRequest;
 import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.auth.RegisterOrganizationRequest;
 import com.easytask.backend.comment.CommentResponse;
 import com.easytask.backend.comment.CommentService;
 import com.easytask.backend.comment.CommentTextRequest;
+import com.easytask.backend.comment.CreateCommentRequest;
 import com.easytask.backend.notification.NotificationService;
 import com.easytask.backend.project.AddProjectMemberRequest;
 import com.easytask.backend.project.CreateProjectRequest;
@@ -15,14 +19,21 @@ import com.easytask.backend.project.ProjectStatus;
 import com.easytask.backend.recurring.CreateRecurringTaskRuleRequest;
 import com.easytask.backend.recurring.RecurrenceFrequency;
 import com.easytask.backend.recurring.RecurringTaskGenerationService;
+import com.easytask.backend.recurring.RecurringTaskRuleResponse;
 import com.easytask.backend.recurring.RecurringTaskRuleService;
+import com.easytask.backend.savedfilter.CreateSavedFilterRequest;
+import com.easytask.backend.savedfilter.SavedFilterService;
 import com.easytask.backend.role.CreateRoleRequest;
 import com.easytask.backend.role.DataScope;
 import com.easytask.backend.role.RoleService;
+import com.easytask.backend.tag.CreateTagRequest;
+import com.easytask.backend.tag.TagService;
 import com.easytask.backend.task.CreateTaskRequest;
+import com.easytask.backend.task.TaskPinService;
 import com.easytask.backend.task.TaskPriority;
 import com.easytask.backend.task.TaskService;
 import com.easytask.backend.task.TaskStatus;
+import com.easytask.backend.task.UpdateTaskBlockedRequest;
 import com.easytask.backend.task.UpdateTaskStatusRequest;
 import com.easytask.backend.team.AddTeamMemberRequest;
 import com.easytask.backend.team.CreateTeamRequest;
@@ -32,12 +43,14 @@ import com.easytask.backend.timeentry.TimeEntryService;
 import com.easytask.backend.user.AppUser;
 import com.easytask.backend.user.AppUserRepository;
 import com.easytask.backend.user.CreateUserRequest;
+import com.easytask.backend.user.UpdateUserRequest;
 import com.easytask.backend.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -72,14 +85,19 @@ public class DemoDataInitializer {
     private final RoleService roleService;
     private final TeamService teamService;
     private final ProjectService projectService;
+    private final TagService tagService;
     private final TaskService taskService;
+    private final ChecklistService checklistService;
+    private final TaskPinService taskPinService;
     private final CommentService commentService;
     private final AttachmentService attachmentService;
     private final TimeEntryService timeEntryService;
     private final RecurringTaskRuleService recurringTaskRuleService;
     private final RecurringTaskGenerationService recurringTaskGenerationService;
+    private final SavedFilterService savedFilterService;
     private final NotificationService notificationService;
     private final AppUserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public void initialize() {
@@ -141,20 +159,30 @@ public class DemoDataInitializer {
                 "Legacy Migration", "Abandoned attempt to port the old CRM",
                 ProjectStatus.CANCELLED, today.minusDays(120), today.minusDays(30)));
 
+        // --- Tags (P4-3, D32): project-scoped colored labels --------------
+        var designTag = tagService.create(sara, website.id(), new CreateTagRequest("Design", "#8b5cf6"));
+        var frontendTag = tagService.create(sara, website.id(), new CreateTagRequest("Frontend", "#0ea5e9"));
+        var contentTag = tagService.create(sara, website.id(), new CreateTagRequest("Content", "#f59e0b"));
+        var storeTag = tagService.create(sara, mobile.id(), new CreateTagRequest("Store", "#22c55e"));
+
         // --- Tasks: every status, priority, overdue, multi/unassigned ----
         // Website Redesign — the "busy" project.
         UUID heroTask = task(sara, website.id(), "Design new hero section",
                 "Figma exploration for the landing hero", TaskPriority.HIGH,
-                today.minusDays(15), today.plusDays(2), "6", List.of(ahmad.id(), lina.id()));
+                today.minusDays(15), today.plusDays(2), "6", List.of(ahmad.id(), lina.id()),
+                List.of(designTag.id(), frontendTag.id()));
         UUID navTask = task(sara, website.id(), "Rebuild navigation component",
                 "Accessible dropdown navigation", TaskPriority.MEDIUM,
-                today.minusDays(12), today.plusDays(5), "8", List.of(ahmad.id()));
+                today.minusDays(12), today.plusDays(5), "8", List.of(ahmad.id()),
+                List.of(frontendTag.id()));
         UUID seoTask = task(sara, website.id(), "SEO audit fixes",
                 "Apply the findings from the March audit", TaskPriority.LOW,
-                today.minusDays(10), today.minusDays(1), "4", List.of(lina.id())); // overdue
+                today.minusDays(10), today.minusDays(1), "4", List.of(lina.id()),
+                List.of(contentTag.id())); // overdue
         UUID copyTask = task(sara, website.id(), "Rewrite pricing page copy",
                 "Tone-of-voice pass on pricing", TaskPriority.CRITICAL,
-                today.minusDays(8), today.plusDays(1), "3", List.of(lina.id()));
+                today.minusDays(8), today.plusDays(1), "3", List.of(lina.id()),
+                List.of(contentTag.id()));
         UUID blogTask = task(sara, website.id(), "Blog templates", null,
                 TaskPriority.MEDIUM, today.minusDays(5), null, null, List.of(ahmad.id())); // no due date
         UUID backlogTask = task(sara, website.id(), "Collect testimonial quotes",
@@ -181,9 +209,9 @@ public class DemoDataInitializer {
         status(sara, droppedTask, TaskStatus.CANCELLED, "Deprioritized by product");
 
         // Mobile App Launch — planned work, mostly TO_DO.
-        task(sara, mobile.id(), "Store listing assets", "Screenshots and copy",
+        UUID storeTask = task(sara, mobile.id(), "Store listing assets", "Screenshots and copy",
                 TaskPriority.MEDIUM, today.plusDays(7), today.plusDays(21), "6",
-                List.of(khaled.id()));
+                List.of(khaled.id()), List.of(storeTag.id()));
         UUID betaTask = task(sara, mobile.id(), "Recruit beta testers",
                 "20 external testers via the newsletter", TaskPriority.HIGH,
                 today.plusDays(3), today.plusDays(14), "2", List.of(ahmad.id()));
@@ -212,17 +240,41 @@ public class DemoDataInitializer {
                 today.minusDays(110), today.minusDays(60), "16", List.of());
         status(omar, crmTask, TaskStatus.CANCELLED, "Project cancelled");
 
+        // --- Checklists (P4-5, D36): card progress; no activity/notifications.
+        var heroWireframe = checklistService.create(sara, heroTask,
+                new CreateChecklistItemRequest("Wireframe three hero variants"));
+        checklistService.create(sara, heroTask, new CreateChecklistItemRequest("Desktop design in Figma"));
+        checklistService.create(sara, heroTask, new CreateChecklistItemRequest("Mobile width pass"));
+        checklistService.update(ahmad, heroWireframe.id(),
+                new UpdateChecklistItemRequest(null, true, null)); // assignee ticks their own work
+        var storeScreens = checklistService.create(sara, storeTask,
+                new CreateChecklistItemRequest("Capture screenshots on both stores"));
+        checklistService.create(sara, storeTask, new CreateChecklistItemRequest("Write listing copy"));
+        checklistService.update(khaled, storeScreens.id(), new UpdateChecklistItemRequest(null, true, null));
+
+        // --- Blocked flag (P4-6, D37): assignee flags waiting-on-input work.
+        taskService.setBlocked(ahmad, blogTask, new UpdateTaskBlockedRequest(true,
+                "بانتظار محتوى التسويق قبل البدء بالقوالب"));
+
+        // --- Focus pins (P4-7, D33): private daily-focus boards.
+        for (UUID pinned : List.of(heroTask, copyTask, betaTask)) {
+            taskPinService.pin(admin, pinned);
+        }
+        taskPinService.pin(ahmad, heroTask);
+        taskPinService.pin(ahmad, navTask);
+
         // --- Comments (incl. one edited) ---------------------------------
-        commentService.create(ahmad, heroTask, new CommentTextRequest(
-                "First exploration pushed to Figma — feedback welcome."));
-        commentService.create(sara, heroTask, new CommentTextRequest(
-                "Like option B, the gradient one. Can we try it on mobile widths?"));
-        CommentResponse toEdit = commentService.create(lina, seoTask, new CommentTextRequest(
-                "Working through the audit list now."));
+        CommentResponse heroThread = commentService.create(ahmad, heroTask, new CreateCommentRequest(
+                "First exploration pushed to Figma — feedback welcome.", null, null));
+        commentService.create(sara, heroTask, new CreateCommentRequest(
+                "Like option B, the gradient one. Can we try it on mobile widths?",
+                heroThread.id(), List.of(ahmad.id())));
+        CommentResponse toEdit = commentService.create(lina, seoTask, new CreateCommentRequest(
+                "Working through the audit list now.", null, null));
         commentService.update(lina, toEdit.id(), new CommentTextRequest(
                 "Working through the audit list now — 12 of 18 items done."));
-        commentService.create(rami, navTask, new CommentTextRequest(
-                "Keyboard navigation works well. Reviewing contrast next."));
+        commentService.create(rami, navTask, new CreateCommentRequest(
+                "Keyboard navigation works well. Reviewing contrast next.", null, null));
 
         // --- Attachments --------------------------------------------------
         attachmentService.upload(ahmad, heroTask, new SeedFile(
@@ -241,19 +293,37 @@ public class DemoDataInitializer {
                 today.minusDays(3), new BigDecimal("4"), "Audit items 1-12"));
 
         // --- Recurring rule + one generation pass --------------------------
-        recurringTaskRuleService.create(sara, new CreateRecurringTaskRuleRequest(
-                website.id(), "Weekly design sync notes",
-                "Post the sync summary as a task for visibility", TaskPriority.LOW,
-                null, null, new BigDecimal("1"), List.of(lina.id()),
-                RecurrenceFrequency.WEEKLY, 1, today.minusDays(7), null));
+        RecurringTaskRuleResponse weeklySync = recurringTaskRuleService.create(sara,
+                new CreateRecurringTaskRuleRequest(
+                        website.id(), "Weekly design sync notes",
+                        "Post the sync summary as a task for visibility", TaskPriority.LOW,
+                        null, null, new BigDecimal("1"), List.of(lina.id()),
+                        RecurrenceFrequency.WEEKLY, 1, today.minusDays(7), null));
         recurringTaskGenerationService.generateDueTasks();
+
+        // --- Recurrence exception (P4-10, D41): skip one upcoming weekly run.
+        recurringTaskRuleService.occurrences(sara, weeklySync.id(), 6).items().stream()
+                .filter(o -> o.date().isAfter(today))
+                .findFirst()
+                .ifPresent(o -> recurringTaskRuleService.addException(sara, weeklySync.id(), o.date()));
+
+        // --- Saved filters (P4-8, D42): a couple for the demo admin.
+        savedFilterService.create(admin, new CreateSavedFilterRequest("My overdue work",
+                objectMapper.createObjectNode().put("overdue", true).put("sort", "dueDate")));
+        savedFilterService.create(admin, new CreateSavedFilterRequest("Critical & high",
+                objectMapper.createObjectNode().put("priority", "CRITICAL")));
+
+        // --- Audit events (P4-11, D39): come from REAL admin actions (dual-write).
+        // The deactivation above already logged USER_DEACTIVATED; a role change logs ROLE_CHANGED.
+        userService.update(admin, khaled.id(), new UpdateUserRequest(null, null, "MANAGER"));
 
         // --- Notification read-states: Ahmad is caught up, others are not.
         notificationService.markAllRead(ahmad.id());
 
         log.info("DemoDataInitializer: seeded demo org '{}' — 8 users (1 deactivated, 1 custom role), "
-                + "2 teams, 4 projects, ~16 tasks across all 6 statuses, comments, attachments, "
-                + "time entries, 1 recurring rule. Login: {} / {}", "Demo Organization",
+                + "2 teams, 4 projects, ~16 tasks across all 6 statuses, 4 tags, checklists on 2 tasks, "
+                + "1 blocked task, focus pins for admin + Ahmad, comments, attachments, time entries, "
+                + "1 recurring rule. Login: {} / {}", "Demo Organization",
                 ADMIN_EMAIL, PASSWORD);
     }
 
@@ -274,10 +344,17 @@ public class DemoDataInitializer {
     private UUID task(AuthenticatedUser creator, UUID projectId, String title, String description,
                       TaskPriority priority, LocalDate start, LocalDate due, String estimatedHours,
                       List<UUID> assigneeIds) {
+        return task(creator, projectId, title, description, priority, start, due, estimatedHours,
+                assigneeIds, null);
+    }
+
+    private UUID task(AuthenticatedUser creator, UUID projectId, String title, String description,
+                      TaskPriority priority, LocalDate start, LocalDate due, String estimatedHours,
+                      List<UUID> assigneeIds, List<UUID> tagIds) {
         return taskService.create(creator, new CreateTaskRequest(
                 projectId, title, description, priority, start, due,
                 estimatedHours == null ? null : new BigDecimal(estimatedHours),
-                assigneeIds)).id();
+                assigneeIds, tagIds)).id();
     }
 
     private void status(AuthenticatedUser actor, UUID taskId, TaskStatus to, String note) {

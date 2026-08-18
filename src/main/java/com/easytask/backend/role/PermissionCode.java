@@ -22,7 +22,8 @@ public enum PermissionCode {
     TASK_CANCEL("task:cancel", "Cancel non-approved tasks"),
     RECURRING_MANAGE("recurring:manage", "Create and view recurring task rules"),
     DASHBOARD_MANAGER("dashboard:manager", "View the manager dashboard and reports"),
-    DASHBOARD_ADMIN("dashboard:admin", "View the organization-wide admin dashboard");
+    DASHBOARD_ADMIN("dashboard:admin", "View the organization-wide admin dashboard"),
+    AUDIT_READ("audit:read", "View the organization security audit log");
 
     private final String code;
     private final String description;

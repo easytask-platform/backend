@@ -19,7 +19,7 @@ public record OrgActivityItemResponse(
     public static OrgActivityItemResponse from(TaskActivityLog log) {
         return new OrgActivityItemResponse(log.getId(), log.getTask().getId(),
                 log.getTask().getTitle(), log.getTask().getProject().getName(),
-                new ActivityLogResponse.Actor(log.getActor().getId(), log.getActor().getFullName()),
+                ActivityLogResponse.Actor.from(log.getActor()),
                 log.getEventType(), log.getOldValue(), log.getNewValue(), log.getCreatedAt());
     }
 }

@@ -42,6 +42,11 @@ public class TaskComment {
     @JoinColumn(name = "author_user_id", nullable = false)
     private AppUser author;
 
+    /** Top-level parent when this comment is a reply (one level deep, D34); null otherwise. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_comment_id")
+    private TaskComment parent;
+
     @Column(nullable = false, columnDefinition = "text")
     private String content;
 

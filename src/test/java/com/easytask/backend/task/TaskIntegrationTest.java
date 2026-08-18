@@ -308,7 +308,8 @@ class TaskIntegrationTest extends IntegrationTestSupport {
         List<String> fields = new ArrayList<>();
         item.properties().forEach(e -> fields.add(e.getKey()));
         assertThat(fields).containsExactlyInAnyOrder("id", "projectId", "projectName", "title", "status",
-                "priority", "startDate", "dueDate", "estimatedHours", "totalLoggedHours", "overdue", "assignees");
+                "priority", "startDate", "dueDate", "estimatedHours", "totalLoggedHours", "overdue", "assignees",
+                "tags", "blocked", "blockedReason", "checklistDone", "checklistTotal", "pinned");
         assertThat(item.path("assignees").get(0).path("fullName").asText()).isEqualTo("Sam Employee");
     }
 }

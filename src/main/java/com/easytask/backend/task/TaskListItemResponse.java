@@ -1,5 +1,7 @@
 package com.easytask.backend.task;
 
+import com.easytask.backend.tag.TagSummary;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -17,9 +19,15 @@ public record TaskListItemResponse(
         BigDecimal estimatedHours,
         BigDecimal totalLoggedHours,
         boolean overdue,
-        List<AssigneeSummary> assignees
+        List<AssigneeSummary> assignees,
+        List<TagSummary> tags,
+        boolean blocked,
+        String blockedReason,
+        int checklistDone,
+        int checklistTotal,
+        boolean pinned
 ) {
 
-    public record AssigneeSummary(UUID id, String fullName) {
+    public record AssigneeSummary(UUID id, String fullName, String avatarUrl) {
     }
 }
