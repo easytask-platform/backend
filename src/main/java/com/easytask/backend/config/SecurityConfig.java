@@ -46,6 +46,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/verify-reset-code",
                                 "/api/v1/auth/reset-password")
                         .permitAll()
+                        .requestMatchers("/api/v1/health").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling

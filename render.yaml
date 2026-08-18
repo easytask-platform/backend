@@ -1,0 +1,36 @@
+# Render blueprint for the EasyTask backend (Spring Boot on the free plan).
+# Secrets are marked sync:false — set their values in the Render dashboard, never in git.
+services:
+  - type: web
+    name: easytask-backend
+    runtime: docker
+    plan: free
+    region: ohio            # same region as the Neon database (AWS US East 2 / Ohio)
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      # --- Neon Postgres ---
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      # --- Auth ---
+      - key: JWT_SECRET
+        sync: false
+      # --- CORS: set to the deployed Vercel dashboard origin ---
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # --- Gmail SMTP (Spring relaxed-binds these to spring.mail.username/password) ---
+      - key: SPRING_MAIL_USERNAME
+        sync: false
+      - key: SPRING_MAIL_PASSWORD
+        sync: false
+      # --- Firebase service-account JSON for push (optional; leave unset to disable) ---
+      - key: FIREBASE_CREDENTIALS
+        sync: false
+      # --- Misc ---
+      - key: SEED_DEMO_DATA
+        value: "false"

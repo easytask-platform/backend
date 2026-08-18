@@ -1,0 +1,9 @@
+target/
+data/
+*.env
+.mail.env
+.env
+.git/
+.gitignore
+*.md
+HELP.md
