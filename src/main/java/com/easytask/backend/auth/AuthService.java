@@ -127,4 +127,23 @@ public class AuthService {
         audit.passwordChanged(userId);
         mailer.sendPasswordChangedNotice(user);
     }
+
+    /**
+     * First-login password set for a user still on an admin/invite temporary
+     * password. Unlike {@link #changePassword}, it takes no current password
+     * (the login proved it) and keeps the current session alive so the user
+     * flows straight into the app after choosing their own password.
+     */
+    @Transactional
+    public void setFirstLoginPassword(UUID userId, FirstLoginPasswordRequest request) {
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthenticatedException("User no longer exists"));
+        if (!user.isMustChangePassword()) {
+            throw new ConflictException("Password change is not required for this account");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setMustChangePassword(false);
+        audit.passwordChanged(userId);
+        mailer.sendPasswordChangedNotice(user);
+    }
 }

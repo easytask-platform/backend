@@ -67,25 +67,6 @@ public class PasswordResetService {
                 .orElseThrow(() -> new UnauthenticatedException("Invalid or expired code"));
     }
 
-    /**
-     * P3-2 (D24): invitation for a user created without a password. Reuses the
-     * reset-token mechanism with a longer TTL; the invitee redeems the code
-     * through the normal reset-password endpoint, which also serves as the
-     * accept-invite step.
-     */
-    @Transactional
-    public void createInvitation(AppUser user, String organizationName) {
-        Instant now = Instant.now();
-        resetTokenRepository.invalidateAllForUser(user.getId(), now);
-        String rawToken = generateCode();
-        resetTokenRepository.save(PasswordResetToken.builder()
-                .user(user)
-                .tokenHash(sha256(rawToken))
-                .expiresAt(now.plus(properties.inviteTtl()))
-                .build());
-        mailer.sendInvitation(user, organizationName, rawToken);
-    }
-
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         Instant now = Instant.now();

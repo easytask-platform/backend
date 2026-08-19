@@ -74,4 +74,16 @@ public class AuthController {
                                @Valid @RequestBody ChangePasswordRequest request) {
         authService.changePassword(user.id(), request);
     }
+
+    /**
+     * First-login password set: a signed-in user still on a temporary password
+     * chooses their own. Authenticated (not in the permit-all list), so no
+     * current password is needed — the login already proved the temporary one.
+     */
+    @PostMapping("/auth/first-login-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void setFirstLoginPassword(@AuthenticationPrincipal AuthenticatedUser user,
+                                      @Valid @RequestBody FirstLoginPasswordRequest request) {
+        authService.setFirstLoginPassword(user.id(), request);
+    }
 }

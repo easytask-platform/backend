@@ -113,27 +113,43 @@ class InvitationIntegrationTest {
     }
 
     @Test
-    void userCreatedWithoutPasswordIsInvitedAndSetsTheirOwn() throws Exception {
+    void userCreatedWithoutPasswordIsInvitedWithTempPasswordAndSetsTheirOwn() throws Exception {
         String email = "sam-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
         createUser(email, "");
 
         assertThat(LAST_INVITE_ORG.get()).isEqualTo("Invite Org");
-        String inviteToken = LAST_INVITE_TOKEN.get();
-        assertThat(inviteToken).isNotBlank();
+        // The invitation now carries a temporary password, not a code.
+        String temporaryPassword = LAST_INVITE_TOKEN.get();
+        assertThat(temporaryPassword).isNotBlank();
 
-        // Nothing to log in with yet.
-        login(email, "password123", 401);
+        // Sign in with the emailed temporary password; forced to change it.
+        JsonNode body = login(email, temporaryPassword, 200);
+        assertThat(body.path("user").path("mustChangePassword").asBoolean()).isTrue();
+        String accessToken = body.path("accessToken").asText();
 
-        // Redeeming the invite = the normal reset-password endpoint.
-        mockMvc.perform(post("/api/v1/auth/reset-password")
+        // Set their own password — no current password needed, session stays alive.
+        mockMvc.perform(post("/api/v1/auth/first-login-password")
+                        .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"token": "%s", "newPassword": "myOwnSecret9"}
-                                """.formatted(inviteToken)))
+                                {"newPassword": "myOwnSecret9"}
+                                """))
                 .andExpect(status().isNoContent());
 
-        JsonNode body = login(email, "myOwnSecret9", 200);
-        assertThat(body.path("user").path("mustChangePassword").asBoolean()).isFalse();
+        JsonNode after = login(email, "myOwnSecret9", 200);
+        assertThat(after.path("user").path("mustChangePassword").asBoolean()).isFalse();
+    }
+
+    @Test
+    void firstLoginPasswordRejectedWhenNoChangeRequired() throws Exception {
+        // The admin's own account never had a temporary password.
+        mockMvc.perform(post("/api/v1/auth/first-login-password")
+                        .header("Authorization", "Bearer " + adminAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"newPassword": "irrelevant9"}
+                                """))
+                .andExpect(status().isConflict());
     }
 
     @Test

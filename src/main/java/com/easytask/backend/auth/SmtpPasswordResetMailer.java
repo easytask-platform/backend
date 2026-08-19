@@ -49,7 +49,7 @@ public class SmtpPasswordResetMailer implements PasswordResetMailer {
     }
 
     @Override
-    public void sendInvitation(AppUser user, String organizationName, String rawToken) {
+    public void sendInvitation(AppUser user, String organizationName, String temporaryPassword) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromAddress);
         message.setTo(user.getEmail());
@@ -57,17 +57,16 @@ public class SmtpPasswordResetMailer implements PasswordResetMailer {
         message.setText("""
                 Hi %s,
 
-                An administrator added you to %s on EasyTask.
-                To activate your account, open the EasyTask app, choose
-                "Forgot password?", and use this code to set your own password:
+                You've been added to %s on EasyTask. Sign in with this email
+                address and the temporary password below:
 
                     %s
 
-                The code is valid for 7 days and can be used once.
-                Your login email is this address.
+                For your security, you'll be asked to choose your own password
+                right after you sign in.
 
                 — EasyTask
-                """.formatted(user.getFullName(), organizationName, rawToken));
+                """.formatted(user.getFullName(), organizationName, temporaryPassword));
         mailSender.send(message);
         log.info("Invitation email sent to {}", user.getEmail());
     }

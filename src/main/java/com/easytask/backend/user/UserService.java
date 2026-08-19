@@ -2,7 +2,6 @@ package com.easytask.backend.user;
 
 import com.easytask.backend.auth.AuthenticatedUser;
 import com.easytask.backend.auth.PasswordResetMailer;
-import com.easytask.backend.auth.PasswordResetService;
 import com.easytask.backend.auth.RefreshTokenRepository;
 import com.easytask.backend.common.ConflictException;
 import com.easytask.backend.common.MembershipRole;
@@ -44,7 +43,6 @@ public class UserService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
-    private final PasswordResetService passwordResetService;
     private final PasswordResetMailer mailer;
     private final SecurityAuditLog audit;
 
@@ -80,28 +78,38 @@ public class UserService {
         if (role == null) {
             throw new ValidationException("Either roleId or role is required", java.util.Map.of());
         }
-        // P3-2 (D24): with a password → temporary, must be changed at first
-        // login; without → invitation email, the user sets their own.
+        // P3-2 (D24): both paths hand the user a temporary password they must
+        // replace at first login. "Invite by email" generates one and emails
+        // it; otherwise the admin supplies one to pass on out-of-band.
         boolean invited = request.initialPassword() == null || request.initialPassword().isBlank();
+        String temporaryPassword = invited ? generateTemporaryPassword() : request.initialPassword();
         AppUser user = userRepository.save(AppUser.builder()
                 .organization(organizationRepository.getReferenceById(principal.organizationId()))
                 .fullName(request.fullName())
                 .email(request.email().toLowerCase(Locale.ROOT))
-                .passwordHash(passwordEncoder.encode(invited ? randomUnusablePassword() : request.initialPassword()))
-                .mustChangePassword(!invited)
+                .passwordHash(passwordEncoder.encode(temporaryPassword))
+                .mustChangePassword(true)
                 .role(role)
                 .build());
         if (invited) {
-            passwordResetService.createInvitation(user, user.getOrganization().getName());
+            mailer.sendInvitation(user, user.getOrganization().getName(), temporaryPassword);
         }
         return UserResponse.from(user);
     }
 
-    /** Placeholder credential for invited users: random, never revealed to anyone. */
-    private static String randomUnusablePassword() {
-        byte[] bytes = new byte[32];
-        new java.security.SecureRandom().nextBytes(bytes);
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    /**
+     * A random, human-typeable temporary password emailed to invited users.
+     * Unambiguous alphabet (no O/0/I/l/1) so it's easy to read from an email
+     * and type on a phone; 12 chars keeps it well above the 8-char minimum.
+     */
+    private static String generateTemporaryPassword() {
+        final String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        StringBuilder password = new StringBuilder(12);
+        for (int i = 0; i < 12; i++) {
+            password.append(alphabet.charAt(random.nextInt(alphabet.length())));
+        }
+        return password.toString();
     }
 
     @Transactional

@@ -11,8 +11,12 @@ public interface PasswordResetMailer {
 
     void sendResetToken(AppUser user, String rawToken);
 
-    /** P3-2 (D24): "you've been added — set your password" invitation. */
-    void sendInvitation(AppUser user, String organizationName, String rawToken);
+    /**
+     * P3-2 (D24): "you've been added" invitation. Carries the temporary
+     * password the invitee signs in with; they're forced to choose their own
+     * immediately after (mustChangePassword).
+     */
+    void sendInvitation(AppUser user, String organizationName, String temporaryPassword);
 
     /**
      * Security notice after any password change — contains no secrets, exists
