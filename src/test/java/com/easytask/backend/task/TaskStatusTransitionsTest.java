@@ -17,7 +17,11 @@ class TaskStatusTransitionsTest {
     /** The system Employee role's permission set. */
     private static final Set<String> EXECUTE = Set.of("task:execute");
 
-    /** The reviewing permissions the Manager/Admin system roles hold. */
+    /**
+     * Review + cancel WITHOUT manage — a partial set used to exercise those two
+     * branches in isolation. The real Manager/Admin roles ALSO hold task:manage,
+     * which grants full any→any override (see {@link #managePermissionAllowsAnyTransition}).
+     */
     private static final Set<String> REVIEW_AND_CANCEL = Set.of("task:review", "task:cancel");
 
     @Test
@@ -71,6 +75,18 @@ class TaskStatusTransitionsTest {
         assertThat(TaskStatusTransitions.isAllowed(all, IN_REVIEW, APPROVED)).isTrue();
         assertThat(TaskStatusTransitions.isAllowed(all, IN_PROGRESS, CANCELLED)).isTrue();
         assertThat(TaskStatusTransitions.isAllowed(all, APPROVED, CANCELLED)).isFalse();
+    }
+
+    @Test
+    void managePermissionAllowsAnyTransition() {
+        Set<String> manage = Set.of("task:manage");
+        // forward, skipping the review gate, backward, and out of terminal states
+        assertThat(TaskStatusTransitions.isAllowed(manage, TO_DO, APPROVED)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(manage, APPROVED, IN_PROGRESS)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(manage, CANCELLED, TO_DO)).isTrue();
+        assertThat(TaskStatusTransitions.isAllowed(manage, IN_REVIEW, TO_DO)).isTrue();
+        // a no-op (same status) is still not a transition
+        assertThat(TaskStatusTransitions.isAllowed(manage, APPROVED, APPROVED)).isFalse();
     }
 
     @Test

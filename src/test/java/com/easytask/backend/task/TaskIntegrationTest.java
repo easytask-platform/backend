@@ -150,14 +150,15 @@ class TaskIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("APPROVED"));
 
-        // approved task cannot be cancelled or edited
-        changeStatus(fx.managerToken(), taskId, "CANCELLED", 409);
+        // approved task's fields are still locked from editing
         mockMvc.perform(patch("/api/v1/tasks/" + taskId).header("Authorization", "Bearer " + fx.managerToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title": "New title"}
                                 """))
                 .andExpect(status().isConflict());
+        // but a task:manage holder (manager/admin) can now move it back out of APPROVED
+        changeStatus(fx.managerToken(), taskId, "CANCELLED", 200);
 
         // employee received reopened + approved notifications along the way
         var types = notificationsFor(fx.employeeId()).stream().map(n -> n.getType().name()).toList();

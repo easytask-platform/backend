@@ -301,6 +301,12 @@ public class TaskService {
             task.setApprovedAt(Instant.now());
             activityService.log(task, actor, ActivityEventType.TASK_APPROVED, from.name(), to.name());
         } else {
+            // Moving a task back out of APPROVED clears the stale approval stamp
+            // (now possible for task:manage holders).
+            if (from == TaskStatus.APPROVED) {
+                task.setApprovedBy(null);
+                task.setApprovedAt(null);
+            }
             activityService.log(task, actor, ActivityEventType.STATUS_CHANGED, from.name(), to.name());
         }
 
